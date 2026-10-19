@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -41,37 +42,48 @@ DEFAULT_TEXTS = [
 
 
 @torch.no_grad()
-def layer_logits(model, input_ids: torch.Tensor) -> list[torch.Tensor]:
-    """Logits de cada camada 1..L para a sequência, lidos pela cabeça final."""
+def layer_stats(model, input_ids: torch.Tensor, tau: float) -> dict[str, list[dict[str, float]]]:
+    """Estatísticas de cada camada 1..L, separadas na 1ª e na 2ª metade do texto.
+
+    Os logits de uma camada ocupam tokens × |V| (~600 MB para 1024 tokens no
+    Qwen), então cada camada é lida pela cabeça, resumida e descartada.
+    """
     out = model(input_ids, output_hidden_states=True)
     norm, head = model.model.norm, model.lm_head
     # hidden_states[0] é o embedding; o último já é a saída final, usamos out.logits.
-    per_layer = [head(norm(h))[0] for h in out.hidden_states[1:-1]]
-    return per_layer + [out.logits[0]]
+    states = out.hidden_states[1:-1]
+    n_tokens = input_ids.shape[1]
+    halves = {"1a metade": slice(0, n_tokens // 2), "2a metade": slice(n_tokens // 2, n_tokens)}
+
+    results = {}
+    for name, span in halves.items():
+        final = out.logits[0, span].float()
+        final_top = final.argmax(-1)
+        log_p_final = F.log_softmax(final, -1)
+        rows = []
+        for layer in range(1, len(states) + 2):
+            lg = final if layer > len(states) else head(norm(states[layer - 1][0, span])).float()
+            stress = entropy_stress(lg)
+            agree = lg.argmax(-1) == final_top
+            exits = stress <= tau
+            kl = F.kl_div(F.log_softmax(lg, -1), log_p_final, log_target=True, reduction="none")
+            rows.append(
+                {
+                    "layer": layer,
+                    "stress": stress.mean().item(),
+                    "agree": agree.float().mean().item(),
+                    "kl": kl.sum(-1).mean().item(),
+                    "exit_rate": exits.float().mean().item(),
+                    "exit_precision": agree[exits].float().mean().item() if exits.any() else float("nan"),
+                }
+            )
+            del lg, kl
+        results[name] = rows
+    return results
 
 
-def summarize(logits: list[torch.Tensor], tau: float) -> list[dict[str, float]]:
-    final = logits[-1].float()
-    final_top = final.argmax(-1)
-    log_p_final = F.log_softmax(final, -1)
-    rows = []
-    for layer, lg in enumerate(logits, start=1):
-        lg = lg.float()
-        stress = entropy_stress(lg)
-        agree = lg.argmax(-1) == final_top
-        exits = stress <= tau
-        kl = F.kl_div(F.log_softmax(lg, -1), log_p_final, log_target=True, reduction="none").sum(-1)
-        rows.append(
-            {
-                "layer": layer,
-                "stress": stress.mean().item(),
-                "agree": agree.float().mean().item(),
-                "kl": kl.mean().item(),
-                "exit_rate": exits.float().mean().item(),
-                "exit_precision": agree[exits].float().mean().item() if exits.any() else float("nan"),
-            }
-        )
-    return rows
+def _pct(x: float) -> str:
+    return "—" if math.isnan(x) else f"{x:.0%}"
 
 
 def print_table(title: str, halves: dict[str, list[dict[str, float]]]) -> None:
@@ -87,7 +99,7 @@ def print_table(title: str, halves: dict[str, list[dict[str, float]]]) -> None:
             f"{ra['layer']:>6} | {(ra['stress'] + rb['stress']) / 2:>7.2f} | "
             f"{ra['agree']:>7.0%} → {rb['agree']:<7.0%} | {(ra['kl'] + rb['kl']) / 2:>6.2f} | "
             f"{ra['exit_rate']:>4.0%} → {rb['exit_rate']:<4.0%} | "
-            f"{ra['exit_precision']:>6.0%} → {rb['exit_precision']:<6.0%}"
+            f"{_pct(ra['exit_precision']):>6} → {_pct(rb['exit_precision']):<6}"
         )
 
 
@@ -111,12 +123,7 @@ def main() -> None:
     for path in args.texts:
         ids = tokenizer(path.read_text(encoding="utf-8"), return_tensors="pt").input_ids
         ids = ids[:, : args.max_tokens].to(args.device)
-        logits = layer_logits(model, ids)
-        mid = ids.shape[1] // 2
-        halves = {
-            "1a metade": summarize([lg[:mid] for lg in logits], args.tau),
-            "2a metade": summarize([lg[mid:] for lg in logits], args.tau),
-        }
+        halves = layer_stats(model, ids, args.tau)
         print_table(f"{path.relative_to(ROOT)} ({ids.shape[1]} tokens)", halves)
         results[str(path.relative_to(ROOT))] = halves
 
