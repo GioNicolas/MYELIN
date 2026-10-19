@@ -79,3 +79,24 @@ MYELIN/
 └── tests/
     └── test_fast_synapse.py                           # Teste matemático local em CPU (2 segundos)
 ```
+
+---
+
+## 4. Trabalhos Futuros: Uma Segunda Memória, Lenta (Fora do Escopo da Fase 1)
+
+**Limitação observada na Fase 1 (LLM de brinquedo, $r = 16$, média de 10 sementes):** a Sinapse Rápida é uma memória de trabalho de tamanho fixo. Com mais padrões ativos do que o posto $r$ comporta, os antigos são sobrescritos, e ao voltar a um assunto esquecido a camada rasa **reaprende do zero, na mesma velocidade**: 63 chamadas ao córtex na 1ª vez contra 65 na volta, após 9 outros assuntos (62 com a sinapse zerada). Não há "economia de reaprendizado" (*savings*).
+
+**Ideia (inspirada nos *Complementary Learning Systems*, McClelland et al., 1995: hipocampo rápido + neocórtex lento):** somar à camada rasa uma segunda sinapse lenta $\Delta W_k^{\text{slow}} = \mathbf{B}_k^{\text{slow}} \mathbf{A}_k^\top$, com decaimento quase nulo ($\gamma_{\text{slow}} \approx 0.9999$), alimentada **apenas pelo que se repete**:
+
+$$\hat{\mathbf{h}}_t^{(k)} = f_k\left(\mathbf{h}_t^{(k-1)}\right) + \left(\mathbf{B}_k^{\text{slow}} + \mathbf{B}_k\right)\mathbf{A}_k^\top \mathbf{h}_t^{(k-1)}, \qquad \mathbf{B}_k^{\text{slow}} \leftarrow \gamma_{\text{slow}} \mathbf{B}_k^{\text{slow}} + \varepsilon \, \mathbf{B}_k \quad (\varepsilon \ll \eta)$$
+
+A transferência pode ser contínua (passo $\varepsilon$ a cada consolidação) ou periódica, como uma fase de "sono".
+
+**Métrica:** *savings* = chamadas ao córtex na volta a um assunto ÷ chamadas na 1ª vez. Hoje ≈ 1.0, e o objetivo é bem abaixo de 1.
+
+**Riscos a resolver antes:**
+- A sinapse lenta também tem posto finito e precisa de um critério do que merece ser guardado.
+- Uma consolidação errada fica gravada por muito tempo. O portão de estresse continua sendo a rede de segurança.
+- Se a memória lenta persistir entre sessões, ela vira memória **por usuário**, com implicações de privacidade e isolamento entre conversas.
+
+**Prioridade:** só depois de H1 e H2 estarem confirmadas num modelo real (Qwen/Llama).
