@@ -35,6 +35,8 @@ $$\mathcal{S}_t = -\frac{1}{\log |V|} \sum_{v \in V} p_t^{(k)}(v) \log p_t^{(k)}
   * **Se $\mathcal{S}_t > \tau_{\text{stress}}$ (Alto Estresse / Dúvida):**  
     O sinal sobe pelo **Córtex Profundo** (camadas $k+1$ até $L$), produzindo o estado final verdadeiro $\mathbf{h}_t^{(L)}$ e a distribuição de elite $p_t^{(L)}$.
 
+> **Atualização (Experimento 0, 19/10/2026):** no Qwen2.5-0.5B, ler $\hat{\mathbf{h}}_t^{(k)}$ direto pela cabeça compartilhada (sem $P_k$) dá 0% de concordância com a camada final até a camada 16, e as camadas rasas ainda ficam confiantes e erradas. O projetor $P_k$ (*tuned lens*, treinado uma vez e congelado) passa a ser **obrigatório**: $p_t^{(k)} = \operatorname{Softmax}(\mathbf{W}_{\text{head}} \cdot \operatorname{Norm}(P_k(\hat{\mathbf{h}}_t^{(k)})))$, e o k e a calibração do estresse serão definidos pelo Experimento 0b. Detalhes em [resultados-exp0.md](resultados-exp0.md).
+
 ---
 
 ### Peça 3: Mielinização — Aprendizado Instantâneo pelo Resíduo ($L \rightarrow k$)

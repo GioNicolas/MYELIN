@@ -12,6 +12,7 @@
 
 - 📘 **[Guia de Estudo, Explicação Visual e Pitch (Caso Alguém Pergunte)](docs/guia-de-estudo-e-pitch.md):** documento feito para estudar a fundo como o MYELIN funciona sem jargão difícil, entender o que é uma sinapse no código, por que a memória nunca explode e como responder perguntas de avaliadores, professores ou recrutadores.
 - 📐 **[Especificação Matemática, Hipóteses e Experimento Decisivo](docs/especificacao-matematica-e-experimento.md):** equações da sinapse rápida ($\Delta W_{\text{fast}}$), gatilho de estresse ($\mathcal{S}_t$), aprendizado pelo resíduo entre a Camada 32 e a Camada 4, decaimento homeostático e arquitetura de código (`src/myelin/`).
+- 🔬 **[Resultados do Experimento 0](docs/resultados-exp0.md):** no Qwen2.5-0.5B real, as camadas rasas lidas direto pela cabeça final concordam 0% com a camada final e ficam confiantes e erradas, o que torna obrigatório o tradutor $P_k$ (*tuned lens*).
 
 ---
 

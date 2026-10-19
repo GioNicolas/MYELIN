@@ -1,7 +1,8 @@
 """Experimento 0: o quanto cada camada de um LLM real já "sabe" a resposta final?
 
 Para cada camada ℓ, lê o estado oculto pela cabeça do próprio modelo
-(logit lens: lm_head(norm(h_ℓ))) e mede, token a token:
+(logit lens: lm_head(norm(h_ℓ))) ou, com --lens, pelo tradutor treinado
+(tuned lens: lm_head(norm(P_ℓ(h_ℓ))), ver exp0b_tuned_lens.py) e mede, token a token:
 
   - S       : estresse (entropia normalizada) da previsão da camada ℓ
   - concorda: top-1 da camada ℓ == top-1 da camada final
@@ -14,7 +15,8 @@ Compara a 1ª e a 2ª metade de cada texto: se a camada rasa melhora na 2ª
 metade SEM sinapse, isso é o efeito do contexto (atenção copiando padrões),
 a linha de base que o MYELIN precisa superar no H1.
 
-    python experiments/exp0_profundidade_por_camada.py   # ou pelo notebook no Colab
+    python experiments/exp0_profundidade_por_camada.py                 # logit lens
+    python experiments/exp0_profundidade_por_camada.py --lens P.pt     # tuned lens
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from myelin import entropy_stress  # noqa: E402
+from myelin import TunedLens, entropy_stress  # noqa: E402
 
 DEFAULT_TEXTS = [
     ROOT / "src" / "myelin" / "fast_synapse.py",
@@ -42,7 +44,9 @@ DEFAULT_TEXTS = [
 
 
 @torch.no_grad()
-def layer_stats(model, input_ids: torch.Tensor, tau: float) -> dict[str, list[dict[str, float]]]:
+def layer_stats(
+    model, input_ids: torch.Tensor, tau: float, lens: TunedLens | None = None
+) -> dict[str, list[dict[str, float]]]:
     """Estatísticas de cada camada 1..L, separadas na 1ª e na 2ª metade do texto.
 
     Os logits de uma camada ocupam tokens × |V| (~600 MB para 1024 tokens no
@@ -62,7 +66,11 @@ def layer_stats(model, input_ids: torch.Tensor, tau: float) -> dict[str, list[di
         log_p_final = F.log_softmax(final, -1)
         rows = []
         for layer in range(1, len(states) + 2):
-            lg = final if layer > len(states) else head(norm(states[layer - 1][0, span])).float()
+            if layer > len(states):
+                lg = final
+            else:
+                h = states[layer - 1][0, span]
+                lg = head(norm(h if lens is None else lens(layer, h))).float()
             stress = entropy_stress(lg)
             agree = lg.argmax(-1) == final_top
             exits = stress <= tau
@@ -110,6 +118,8 @@ def main() -> None:
     parser.add_argument("--max-tokens", type=int, default=1024)
     parser.add_argument("--tau", type=float, default=0.3)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--lens", type=Path, help="tradutor P_k treinado (tuned lens); sem ele, logit lens")
+    parser.add_argument("--out-dir", type=Path, default=ROOT / "results")
     args = parser.parse_args()
 
     torch.set_grad_enabled(False)
@@ -117,21 +127,23 @@ def main() -> None:
     model = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.float32)
     model = model.to(args.device).eval()
     n_layers = model.config.num_hidden_layers
-    print(f"Modelo {args.model}: {n_layers} camadas, τ={args.tau}, device={args.device}")
+    lens = TunedLens.load(args.lens, map_location=args.device).eval() if args.lens else None
+    reader = "tuned lens" if lens else "logit lens"
+    print(f"Modelo {args.model}: {n_layers} camadas, τ={args.tau}, leitura={reader}, device={args.device}")
 
     results = {}
     for path in args.texts:
         ids = tokenizer(path.read_text(encoding="utf-8"), return_tensors="pt").input_ids
         ids = ids[:, : args.max_tokens].to(args.device)
-        halves = layer_stats(model, ids, args.tau)
+        halves = layer_stats(model, ids, args.tau, lens)
         print_table(f"{path.relative_to(ROOT)} ({ids.shape[1]} tokens)", halves)
         results[str(path.relative_to(ROOT))] = halves
 
-    out_dir = ROOT / "results"
-    out_dir.mkdir(exist_ok=True)
-    out_file = out_dir / f"exp0_{args.model.split('/')[-1]}.json"
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    suffix = "_tunedlens" if lens else ""
+    out_file = args.out_dir / f"exp0_{args.model.split('/')[-1]}{suffix}.json"
     out_file.write_text(json.dumps(results, indent=2), encoding="utf-8")
-    print(f"\nResultados salvos em {out_file.relative_to(ROOT)}")
+    print(f"\nResultados salvos em {out_file}")
 
 
 if __name__ == "__main__":
