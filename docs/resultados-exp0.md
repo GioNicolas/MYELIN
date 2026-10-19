@@ -60,6 +60,39 @@ KL médio $D_{\text{KL}}(p_{24} \parallel p_4)$ na camada 4: **15,9 / 15,8 / 13,
 - **O medidor de estresse precisa ser validado depois do tradutor.** Se a precisão com S ≤ τ continuar abaixo de ~90%, serão necessários outro medidor (margem, ou uma cabeça de confiança treinada) e verificações aleatórias acordando o córtex mesmo com estresse baixo.
 - **O experimento do H1 precisa comparar contra o efeito do contexto:** um Early-Exit Estático com o mesmo $P_k$, no mesmo texto, sem sinapse.
 
+## Confirmação no Qwen2.5-1.5B (28 camadas, logit lens, GPU T4)
+
+O mesmo padrão aparece num modelo 3× maior:
+
+- **Camadas 1–19:** concordância de 0–4%, com KL ~9–12.
+- **Confiantes e erradas:** 15–30% dos tokens com S ≤ τ, com precisão de 0–10%.
+- **Concordância acima de 50%:** só a partir da camada 26–27 de 28.
+- **Calibração ainda pior:** mesmo na camada 25, a precisão com S ≤ τ fica em 24–70%.
+
+| Camada (de 28) | `fast_synapse.py` concorda | precisão se S ≤ τ | `README.md` concorda | precisão se S ≤ τ |
+|---:|---|---|---|---|
+| 4 | 1% → 0% | 3% → 0% | 1% → 1% | 1% → 1% |
+| 14 | 2% → 1% | 4% → 5% | 3% → 1% | 8% → 4% |
+| 20 | 16% → 11% | 30% → 32% | 7% → 6% | 13% → 12% |
+| 24 | 37% → 51% | 43% → 57% | 23% → 16% | 28% → 19% |
+| 26 | 53% → 65% | 58% → 68% | 43% → 36% | 50% → 40% |
+| 27 | 71% → 81% | 76% → 82% | 62% → 65% | 68% → 69% |
+
+## Experimento 0b, parcial: treino do tradutor no 0.5B
+
+O tradutor $P_k$ do Qwen2.5-0.5B foi treinado (500 passos, GPU T4). A medição com ele no notebook falhou sem mostrar o erro e será refeita. O KL no corpus de treino (WikiText-2 + código) caiu bastante:
+
+| Camada (de 24) | 4 | 8 | 12 | 16 | 18 | 20 | 22 | 23 |
+|---|---|---|---|---|---|---|---|---|
+| KL com tradutor (treino, último log) | 2,98 | 2,54 | 2,27 | 1,76 | 1,07 | 0,81 | 0,35 | 0,18 |
+| KL sem tradutor (`fast_synapse.py`, Exp. 0) | 15,9 | 15,6 | 15,4 | 13,4 | 10,7 | 7,3 | 2,8 | 0,9 |
+
+Leitura preliminar: com o tradutor, a camada 18 fica com KL parecido ao da camada 23 sem tradutor, um ganho de ~5 camadas. A camada 4 continua longe (KL ~3). Ressalvas:
+
+- os KLs vêm de corpora diferentes (treino vs. textos de avaliação);
+- o treino ainda não tinha convergido (o KL médio seguia caindo, 2,09 → 2,00 nos últimos logs);
+- concordância e calibração só saem da medição com o tradutor.
+
 ## Próximo passo: Experimento 0b
 
 Treinar $P_k$ para cada camada ([`experiments/exp0b_tuned_lens.py`](../experiments/exp0b_tuned_lens.py)) e repetir esta tabela com ele ([`notebooks/exp0b_tuned_lens.ipynb`](../notebooks/exp0b_tuned_lens.ipynb), GPU no Colab ou no Kaggle). As perguntas são:
