@@ -115,7 +115,6 @@ def main() -> None:
     parser.add_argument("--lens", type=Path, required=True, help="tradutor P_k treinado (exp0b_tuned_lens.py)")
     parser.add_argument("--k", type=int, default=17)
     parser.add_argument("--max-tokens", type=int, default=1024)
-    parser.add_argument("--n-wikitext", type=int, default=2)
     parser.add_argument("--teacher-every", type=int, default=8)
     parser.add_argument("--eta", type=float, default=0.5)
     parser.add_argument("--blocks", type=int, default=8)
@@ -141,7 +140,7 @@ def main() -> None:
     A64 = FastSynapse(d_model, d_model, rank=64).A.to(args.device)
     results = {"config": vars(args), "texts": {}}
 
-    for text in eval_texts(tokenizer, args.max_tokens, args.n_wikitext):
+    for text in eval_texts(tokenizer, args.max_tokens):
         ids = text["ids"].to(args.device)
         states = capture(model, ids, args.k, lens)
         keys = {

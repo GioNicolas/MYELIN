@@ -119,3 +119,21 @@ Concordância da camada rasa com a final, média dos blocos 5–8 (estático →
 - **A ideia tem sinal real e que escala com a supervisão**, mas o efeito absoluto é moderado. Mesmo no melhor caso, a camada 17 continua bem pior que a final (ex.: perplexidade 12,0 contra 6,2).
 - **Ainda não é a resposta do H2.** A rodada 2b dá professor a 50% dos tokens de graça. A pergunta do H2 (qualidade × custo, com o portão decidindo) só sai do Experimento 3.
 - **No enquadramento de decodificação especulativa,** o modelo completo verifica todos os tokens, então o professor é quase contínuo, como aqui. A concordância é a taxa de aceitação do rascunho, e o kNN a sobe em 3 a 6 pontos. Com rascunho na camada 17 de 24, porém, o ganho de velocidade seria pequeno; esse caminho precisaria de uma camada bem mais rasa ou de um modelo maior.
+
+## Próximo: Experimento 3 (o H2 com o portão)
+
+[`experiments/exp3_portao.py`](../experiments/exp3_portao.py) · [`notebooks/exp3_portao.ipynb`](../notebooks/exp3_portao.ipynb)
+
+**Desenho:**
+- portão de estresse de volta, com τ de 0,1 a 0,5, refazendo a simulação inteira para cada τ;
+- Early-Exit Estático contra:
+  - kNN 256, com e sem auditoria de 5%;
+  - viés lento (η = 0,03) + kNN 256;
+  - sinapse linear r = 64 centrada (γ = 0,999 por token);
+- resultado: curvas custo × qualidade.
+
+**Duas contas de custo:**
+- camadas nominais;
+- custo real, incluindo a cabeça (≈ 9 camadas no Qwen2.5-0.5B).
+
+**Textos:** congelados em `data/eval/`.

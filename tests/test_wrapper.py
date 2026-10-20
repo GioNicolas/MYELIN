@@ -273,6 +273,15 @@ def test_leitura_em_lote_igual_a_token_a_token():
     torch.testing.assert_close(batched.shallow_nll, step.shallow_nll, equal_nan=True)
 
 
+def test_estatico_em_lote_igual_a_token_a_token():
+    states, readout = synthetic_text()
+    gate = StressGate(tau=0.5)
+    batched = simulate(states, readout, FastSynapse(D, D), gate, learn=False, audit_rate=0.1)
+    step = simulate(states, readout, FastSynapse(D, D), gate, learn=False, audit_rate=0.1, decay_per_token=True)
+    assert torch.equal(batched.exit, step.exit) and torch.equal(batched.audit, step.audit)
+    torch.testing.assert_close(batched.nll, step.nll, equal_nan=True)
+
+
 def test_decaimento_por_token_continua_sem_consolidacao():
     states, readout = synthetic_text()
     synapse = FastSynapse(D, D, gamma=0.9)

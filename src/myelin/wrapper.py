@@ -333,8 +333,11 @@ def simulate(
     # custo dominante). Com o portão, cada token pode ensinar: trechos de 1.
     # Com calendário fixo, o trecho vai até o próximo token do córtex, inclusive:
     # ele é lido antes de ensinar, como os outros.
+    # Sem aprender (o estático), a memória nunca muda: lotes de 128 tokens.
     if teacher_every and not decay_per_token:
         starts = [0, *range(1, T, teacher_every), T]
+    elif not learn and not decay_per_token:
+        starts = [*range(0, T, 128), T]
     else:
         starts = list(range(T + 1))
 
