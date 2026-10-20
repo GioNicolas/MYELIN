@@ -5,12 +5,14 @@ em tempo de inferência.
 """
 
 from myelin.fast_synapse import FastSynapse
+from myelin.knn_cache import KNNCache
 from myelin.lens import TunedLens
 from myelin.stress_gate import StressGate, entropy_stress, margin_stress
 from myelin.wrapper import LayerStates, SimulationLog, capture, simulate
 
 __all__ = [
     "FastSynapse",
+    "KNNCache",
     "LayerStates",
     "SimulationLog",
     "StressGate",

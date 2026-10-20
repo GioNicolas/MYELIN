@@ -68,16 +68,69 @@ Como ler as colunas:
    - Com chaves paralelas, cada consolidação vale para o texto inteiro: a camada rasa passa a repetir, com confiança, a resposta do último token que o córtex ensinou. No código, isso é frequente (quebras de linha, indentação).
    - Hipótese a confirmar na rodada 2, que mede o |cos| no Qwen real.
 
-## Rodada 2 (a rodar)
+## Revisão externa da rodada 1
 
-**Chaves:** centradas × **padronizadas**. Cada dimensão é dividida pelo seu desvio causal, e as dimensões gigantes deixam de dominar.
+Duas revisões independentes (Antigravity e Codex) receberam o mesmo prompt, com as equações, os resultados e 7 perguntas. Os pontos abaixo foram conferidos no código antes de serem aceitos.
 
-**η:** 0,1 × 0,5.
+### Procedem (confirmados no código)
 
-**Demais parâmetros:** posto 64, com e sem auditoria de 5%.
+| Ponto | Onde | O que muda |
+|---|---|---|
+| **γ só decaía quando havia consolidação.** Se o córtex parava de acordar, a sinapse parava de esquecer, e a homeostase (H3) ficava desligada justamente no colapso. | `fast_synapse.py`: `B.mul_(γ)` dentro de `consolidate` | `FastSynapse.decay()` e opção `decay_per_token` na simulação |
+| **A padronização causal degenera nos primeiros tokens.** No token 1, com 2 amostras, toda dimensão vira ±1. | `causal_standardize` | Novo modo de chave `fixed`: média e desvio medidos num corpus de calibração separado (`fit_key_stats`), sem o 1º token de cada texto (*attention sink*) |
+| **A escala do alvo dependia da própria sinapse** (`rms(q)`), um laço de realimentação desnecessário. | `simulate` | Alvo na escala fixa `rms(P_k(h_k))` (padrão); `target_scale="q"` reproduz a rodada 1 |
+| **O |cos| médio antes da projeção não mede a interferência relevante.** O que importa é c_tj = z_t·z_j/‖z_t‖² depois de A, com sinal, e seus extremos. | `key_similarity` | `key_interference`: quantis de \|c_tj\| com e sem a projeção A |
+| **A projeção aleatória de posto 64 guarda só ~7% da energia da chave**, e chaves ortogonais deixam de ser ortogonais no subespaço. Com d = 896, a matriz completa ocupa 3,2 MB. | `FastSynapse` | Testar posto completo (r = d), que o código já aceita |
+| **O ganho no README pode ser só correção do idioma**, que faltou no treino do tradutor. Além disso, a saída cedo no README **não subiu** ao longo do texto (o H1 falhou lá). | resultados | Ablação "viés online" (a mesma chave para todo token) e textos fora do treino do tradutor (WikiText-2 teste, código do PyTorch) |
+| **τ fixo não é o mesmo orçamento.** O H2 pede comparar curvas qualidade × custo, refazendo a simulação para cada τ (B muda com τ). | desenho experimental | Varredura de τ na próxima rodada com portão |
+| **"Precisão" é fidelidade ao professor**, não acerto do próximo token real. | nomenclatura | Reportar também a NLL no próximo token real (`shallow_nll`) |
+| **Economia:** no Qwen2.5-0.5B a cabeça (896 × 151.936 ≈ 136 M de pesos) custa mais que as 7 camadas (~15 M cada) que uma saída em k = 17 pula. E o KV cache que falta nas camadas profundas não está contabilizado. | viabilidade | Docstring do wrapper corrigida (dizia que a simulação era "exata"); decisão de rumo adiada até sabermos se a memória aprende algo útil |
+| **3 textos de 1024 tokens é pouco**, e 2 deles são do próprio projeto. | desenho experimental | Experimento 2 já usa 7 textos em 4 grupos; avaliação final com dezenas de documentos e bootstrap pareado |
+| **O colapso é estrutural:** só aprender quando o próprio aluno está em dúvida enviesa a amostra, mesmo com chaves boas. | desenho | Separar as perguntas: primeiro um calendário fixo de consultas ao córtex (Experimento 2), depois o portão |
+| **A frase "η = 1 copia a distribuição final" exige γ = 1 e ε → 0.** | docstring | Corrigida |
+| **Atribuir a melhora da 2ª metade a *induction heads* não foi testado.** | resultados do Exp. 0 | Reescrito como hipótese |
 
-**Novidade:** o script imprime o |cos| médio entre chaves de cada modo, no texto real.
+### Não procedem, ou só em parte
 
-**Perguntas:**
-- com chaves padronizadas, o colapso some sem precisar de auditoria?
-- no código, o MYELIN passa a superar o estático?
+- **"O alvo é sempre confiante":** copiar a distribuição do professor também copia a incerteza dele. O problema real é a interferência, que espalha uma correção confiante para tokens com outra resposta.
+- **"KL de treino menor que o de avaliação indica sobreajuste por falta de *weight decay*":** a diferença é explicada principalmente pela mudança de domínio (português nos comentários e no README).
+- **"PCA com 64 direções captura mais de 80% da variância":** plausível, mas não medido. Fica como variante a testar, não como fato.
+- **Decidir a saída pelo estresse sem a sinapse:** as duas revisões notam que isso impede a sinapse de aumentar a cobertura e mata o H1. Fica só como controle experimental.
+
+### Novidade
+
+As duas revisões convergem: a regra de memória (delta rule / *fast weights*) não é nova, e o MYELIN fica na interseção entre:
+- *neural cache* / kNN-LM;
+- *dynamic evaluation* / TTT;
+- *early exit* (CALM, LayerSkip).
+
+O que pode ser novo é a **autodestilação online e seletiva** do professor profundo para uma leitura intermediária, usando o sinal que o córtex já calculou quando o portão reprovou a saída rasa.
+
+Uma sugestão de rumo (Antigravity) é usar a camada rasa + MYELIN como **rascunho em decodificação especulativa**: o modelo completo verifica todos os tokens, o que resolve ao mesmo tempo o KV cache, o travamento e a qualidade. Antes de seguir por aí, é preciso verificar trabalhos próximos que já atualizam o rascunho online, como *Online Speculative Decoding* (Liu et al., 2023), e que usam saída cedo como rascunho, como *Kangaroo* (2024) e *Draft & Verify* (Zhang et al., 2023).
+
+## Experimento 2: a memória aprende algo útil antes do portão? (a rodar)
+
+[`experiments/exp2_diagnostico.py`](../experiments/exp2_diagnostico.py) · [`notebooks/exp2_diagnostico.ipynb`](../notebooks/exp2_diagnostico.ipynb)
+
+**Calendário:** o córtex acorda a cada 8 tokens, igual para todas as memórias, sem portão.
+
+**Medição:** a camada 17 é medida em todos os tokens, antes de aprender com cada um. O resultado principal é o ΔNLL da camada rasa (no próximo token real) na 2ª metade de cada texto, em relação ao estático.
+
+| Memória | Pergunta que responde |
+|---|---|
+| viés online (sem chave) | o ganho é só correção global do tradutor? |
+| r = 64, chave centrada | referência da rodada 1 |
+| r = 64, chave fixa (entrada ou saída da camada 17) | a chave padronizada resolve a interferência? A saída da camada, que já inclui a atenção dela, é melhor chave? |
+| r = d (posto completo) | a compressão de posto baixo estava atrapalhando? |
+| kNN exato | teto: a correção do córtex é previsível a partir da chave? |
+
+**Textos (nenhum usado no treino do tradutor):**
+- os 2 arquivos de código do projeto;
+- 2 textos em português (README e guia);
+- 1 arquivo de código do PyTorch;
+- 2 artigos do split de teste do WikiText-2.
+
+**Leitura dos resultados:**
+- Se nem o kNN melhorar sobre o estático, a correção não é previsível pela chave local, e a ideia precisa mudar (de chave ou de pergunta).
+- Se o kNN e o posto completo melhorarem e o r = 64 não, o culpado é a compressão.
+- Se o viés empatar com todos, o ganho era só correção do tradutor.

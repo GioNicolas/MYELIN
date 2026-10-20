@@ -34,7 +34,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from myelin import FastSynapse, StressGate, TunedLens, capture, simulate  # noqa: E402
-from myelin.wrapper import KEY_MODES, hf_readout, key_similarity, make_keys  # noqa: E402
+from myelin.wrapper import KEY_MODES, fit_key_stats, hf_readout, key_interference, make_keys  # noqa: E402
+from textos import calibration_ids  # noqa: E402
 
 DEFAULT_TEXTS = [
     ROOT / "src" / "myelin" / "fast_synapse.py",
@@ -88,11 +89,14 @@ def main() -> None:
     parser.add_argument("--blocks", type=int, default=8)
     parser.add_argument("--tau", type=float, default=0.3)
     parser.add_argument("--metric", default="entropy", choices=["entropy", "margin"])
-    parser.add_argument("--key-modes", nargs="+", default=["center", "standardize"], choices=KEY_MODES)
+    parser.add_argument("--key-modes", nargs="+", default=["fixed"], choices=KEY_MODES)
     parser.add_argument("--etas", nargs="+", type=float, default=[0.1, 0.5])
     parser.add_argument("--ranks", nargs="+", type=int, default=[64])
     parser.add_argument("--audit-rates", nargs="+", type=float, default=[0.0, 0.05])
     parser.add_argument("--gamma", type=float, default=0.999)
+    parser.add_argument("--decay-per-token", action="store_true", help="γ a cada token, não só ao consolidar")
+    parser.add_argument("--target-scale", default="shallow", choices=["shallow", "q"])
+    parser.add_argument("--max-correction", type=float, help="limita ||Bz|| a esse múltiplo de ||P_k(h_k)||")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "results")
     args = parser.parse_args()
@@ -104,6 +108,10 @@ def main() -> None:
     n_layers, d_model = model.config.num_hidden_layers, model.config.hidden_size
     readout, gate = hf_readout(model), StressGate(args.tau, args.metric)
     configs = run_configs(args.key_modes, args.etas, args.ranks, args.audit_rates)
+    stats = None
+    if "fixed" in args.key_modes:
+        calibration = [ids.to(args.device) for ids in calibration_ids(tokenizer)]
+        stats = fit_key_stats(model, calibration, args.k)["input"]
     print(
         f"Modelo {args.model}: {n_layers} camadas, k={args.k}, τ={args.tau} ({args.metric}), "
         f"γ={args.gamma}, device={args.device}"
@@ -117,8 +125,8 @@ def main() -> None:
         ids = ids[:, : args.max_tokens].to(args.device)
         states = capture(model, ids, args.k, lens, key_mode="raw")
         full_ppl = states.final_nll[:-1].mean().exp().item()
-        keys = {mode: make_keys(states.h_in, mode) for mode in KEY_MODES}
-        similarity = {mode: key_similarity(key) for mode, key in keys.items()}
+        keys = {mode: make_keys(states.h_in, mode, stats) for mode in args.key_modes}
+        similarity = {mode: key_interference(key)["p50"] for mode, key in keys.items()}
 
         runs = {}
         for cfg in configs:
@@ -131,6 +139,9 @@ def main() -> None:
                 gate,
                 learn=cfg["learn"],
                 audit_rate=cfg["audit_rate"],
+                decay_per_token=args.decay_per_token,
+                target_scale=args.target_scale,
+                max_correction=args.max_correction,
             )
             runs[cfg["name"]] = {
                 **cfg,
@@ -139,8 +150,8 @@ def main() -> None:
                 "seconds": time.time() - start,
             }
         print_text_table(f"{name} ({ids.shape[1]} tokens)", full_ppl, runs)
-        print("|cos| médio entre chaves: " + ", ".join(f"{m} {v:.2f}" for m, v in similarity.items()))
-        results["texts"][name] = {"full_ppl": full_ppl, "key_similarity": similarity, "runs": runs}
+        print("|c| mediano entre chaves: " + ", ".join(f"{m} {v:.2f}" for m, v in similarity.items()))
+        results["texts"][name] = {"full_ppl": full_ppl, "key_interference_p50": similarity, "runs": runs}
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     out_file = args.out_dir / f"exp1_{args.model.split('/')[-1]}_k{args.k}.json"

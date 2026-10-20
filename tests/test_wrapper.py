@@ -11,14 +11,16 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from myelin import FastSynapse, StressGate, TunedLens
+from myelin import FastSynapse, KNNCache, StressGate, TunedLens
 from myelin.wrapper import (
+    KeyStats,
     LayerStates,
     capture,
     causal_center,
     causal_standardize,
+    fit_key_stats,
     hf_readout,
-    key_similarity,
+    key_interference,
     make_keys,
     rms_normalize,
     simulate,
@@ -60,6 +62,9 @@ def test_padronizacao_causal_usa_so_ate_t():
         past = h[: t + 1].double()
         expected = (past[-1] - past.mean(0)) / (past.var(0, unbiased=False) + 1e-5).sqrt()
         torch.testing.assert_close(standardized[t], expected.float())
+    # Com 2 amostras, padronizar só deixa o sinal da diferença: por isso o modo "fixed".
+    h2 = torch.tensor([[0.0, 5.0, -300.0, 2.0], [1.0, -5.0, 900.0, 2.5]])
+    torch.testing.assert_close(causal_standardize(h2)[1], torch.tensor([1.0, -1.0, 1.0, 1.0]), atol=1e-3, rtol=0)
 
 
 def test_padronizar_tira_o_dominio_de_uma_dimensao_gigante():
@@ -68,13 +73,30 @@ def test_padronizar_tira_o_dominio_de_uma_dimensao_gigante():
     h[:, 0] += 1000.0 * (torch.rand(200, generator=g) < 0.3)  # ativação gigante em 30% dos tokens
     # Centrar piora: todo token passa a desviar muito da média nessa dimensão,
     # e todas as chaves ficam quase paralelas. Padronizar resolve.
-    assert key_similarity(make_keys(h, "center")) > 0.9
-    assert key_similarity(make_keys(h, "standardize")) < 0.2 < key_similarity(make_keys(h, "raw"))
+    assert key_interference(make_keys(h, "center"))["p50"] > 0.9
+    assert key_interference(make_keys(h, "standardize"))["p99"] < 0.6 < key_interference(make_keys(h, "raw"))["p99"]
+    stats = KeyStats(mean=h.mean(0), std=h.std(0))
+    assert key_interference(make_keys(h, "fixed", stats))["p99"] < 0.6
+
+
+def test_interferencia_depois_da_projecao():
+    # Chaves ortogonais em d = 64 deixam de ser ortogonais num subespaço aleatório de posto 8.
+    keys = torch.eye(64) * 8.0
+    A = FastSynapse(64, 64, rank=8).A
+    assert key_interference(keys, skip=0)["p99"] < 1e-6
+    assert key_interference(keys, A, skip=0)["p50"] > 0.05
+
+
+def test_chave_viés_e_a_mesma_para_todo_token():
+    keys = make_keys(torch.randn(5, 4), "bias")
+    assert torch.equal(keys, torch.ones(5, 4))
 
 
 def test_modo_de_chave_desconhecido():
     with pytest.raises(ValueError):
         make_keys(torch.randn(3, 4), "whiten")
+    with pytest.raises(ValueError):
+        make_keys(torch.randn(3, 4), "fixed")
 
 
 def test_captura_bate_com_o_modelo(tiny_qwen):
@@ -93,6 +115,16 @@ def test_captura_bate_com_o_modelo(tiny_qwen):
     torch.testing.assert_close(states.final_nll[:-1], F.cross_entropy(out.logits[0, :-1], ids[0, 1:], reduction="none"))
     assert states.final_nll[-1].isnan() and states.next_ids[-1] == -1
     assert (states.k, states.n_layers) == (2, 4)
+
+
+def test_estatisticas_de_calibracao(tiny_qwen):
+    texts = [torch.randint(96, (1, 12)), torch.randint(96, (1, 9))]
+    stats = fit_key_stats(tiny_qwen, texts, k=2, skip=4)
+    hidden = [tiny_qwen(ids, output_hidden_states=True).hidden_states for ids in texts]
+    h_in = torch.cat([h[1][0, 4:] for h in hidden])
+    torch.testing.assert_close(stats["input"].mean, h_in.mean(0))
+    torch.testing.assert_close(stats["input"].std, h_in.std(0).clamp_min(1e-3))
+    assert stats["output"].mean.shape == (32,)
 
 
 def test_captura_com_tradutor(tiny_qwen):
@@ -132,11 +164,12 @@ def synthetic_text(n_patterns: int = 8, repeats: int = 10, noise: float = 0.05, 
     target = rms_normalize(head[answers][order])
     final_logits = readout(target)
     next_ids = final_logits.argmax(-1)
-    h_in = jitter(keys)
+    h_in, shallow = jitter(keys), jitter(shallow)
     states = LayerStates(
         h_in=h_in,
+        h_out=shallow,
         key=rms_normalize(h_in),
-        shallow=jitter(shallow),
+        shallow=shallow,
         target=target,
         final_top=final_logits.argmax(-1),
         final_nll=F.cross_entropy(final_logits, next_ids, reduction="none"),
@@ -185,6 +218,60 @@ def test_auditoria_acorda_o_cortex_e_ensina():
     log = simulate(states, readout, synapse, StressGate(tau=1.0), audit_rate=1.0)
     assert not log.exit.any() and log.audit.all() and log.agree.all()
     assert synapse.B.abs().sum() > 0
+
+
+def test_memoria_exata_tambem_aprende_o_atalho():
+    states, readout = synthetic_text()
+    log = simulate(states, readout, KNNCache(beta=20.0, min_sim=0.5), StressGate(tau=0.3))
+    # Aprende em um passo: no 1º bloco (2 repetições de cada padrão) a 2ª vez já sai cedo.
+    first, *_, last = log.blocks(5)
+    assert first["exit_rate"] <= 0.5 and last["exit_rate"] > 0.9
+    assert log.blocks(1)[0]["exit_precision"] > 0.95
+
+
+def test_calendario_fixo_ignora_o_portao():
+    states, readout = synthetic_text()
+    synapse = FastSynapse(D, D, rank=32, eta=0.5, gamma=1.0)
+    log = simulate(states, readout, synapse, StressGate(tau=1.0), teacher_every=4)
+    assert torch.equal(~log.exit, torch.arange(len(log.exit)) % 4 == 0)
+    assert not log.audit.any()
+    # Só 1 em cada 4 tokens ensina, mas a memória generaliza para as repetições.
+    first, *_, last = log.blocks(5)
+    assert last["shallow_agree"] > first["shallow_agree"] + 0.3
+
+
+def test_leitura_em_lote_igual_a_token_a_token():
+    # Com γ = 1, decair por token não muda nada, mas força o caminho token a token.
+    states, readout = synthetic_text()
+    gate = StressGate(tau=0.3)
+    logs = []
+    for per_token in (False, True):
+        memory = FastSynapse(D, D, rank=32, eta=0.5, gamma=1.0)
+        logs.append(simulate(states, readout, memory, gate, teacher_every=4, decay_per_token=per_token))
+    batched, step = logs
+    assert torch.equal(batched.shallow_agree, step.shallow_agree) and torch.equal(batched.exit, step.exit)
+    torch.testing.assert_close(batched.shallow_nll, step.shallow_nll, equal_nan=True)
+
+
+def test_decaimento_por_token_continua_sem_consolidacao():
+    states, readout = synthetic_text()
+    synapse = FastSynapse(D, D, gamma=0.9)
+    synapse.B.fill_(1.0)
+    simulate(states, readout, synapse, StressGate(tau=1.0), decay_per_token=True)  # todos saem cedo
+    torch.testing.assert_close(synapse.B, torch.full_like(synapse.B, 0.9 ** len(states.key)))
+    synapse.B.fill_(1.0)
+    simulate(states, readout, synapse, StressGate(tau=1.0))  # decaimento só na consolidação
+    assert torch.equal(synapse.B, torch.ones_like(synapse.B))
+
+
+def test_regiao_de_confianca_zero_e_o_estatico():
+    states, readout = synthetic_text()
+    gate = StressGate(tau=0.3)
+    capped = simulate(states, readout, FastSynapse(D, D, rank=32), gate, max_correction=0.0)
+    static = simulate(states, readout, FastSynapse(D, D, rank=32), gate, learn=False)
+    assert torch.equal(capped.shallow_agree, static.shallow_agree)
+    with pytest.raises(ValueError):
+        simulate(states, readout, FastSynapse(D, D), gate, target_scale="final")
 
 
 def test_blocos_resumem_o_texto():

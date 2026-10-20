@@ -63,11 +63,17 @@ class FastSynapse(nn.Module):
         return (h_in @ self.A) @ self.B.T
 
     @torch.no_grad()
+    def decay(self) -> None:
+        """Homeostase sozinha: B <- γB (para decair a cada token, e não só a cada consolidação)."""
+        self.B.mul_(self.gamma)
+
+    @torch.no_grad()
     def consolidate(
         self,
         h_in: torch.Tensor,
         residual: torch.Tensor,
         mask: torch.Tensor | None = None,
+        decay: bool = True,
     ) -> None:
         """Mielinização: B <- γB + η · média_t[ r_t z_t^T ], com z_t = A^T h_t.
 
@@ -76,6 +82,8 @@ class FastSynapse(nn.Module):
             residual: resíduo r_t = Norm(h^(L)) - Norm(ĥ^(k)), forma (..., d_out).
             mask: booleano (...,) indicando quais tokens tiveram estresse alto
                 (só esses ensinam a sinapse). None = todos.
+            decay: aplica γ junto com a consolidação. Use False quando o
+                decaimento já é aplicado a cada token com `decay()`.
         """
         z = h_in.reshape(-1, self.d_in) @ self.A
         r = residual.reshape(-1, self.d_out)
@@ -88,7 +96,9 @@ class FastSynapse(nn.Module):
         if self.normalized:
             r = r / (z.pow(2).sum(-1, keepdim=True) + 1e-6)
 
-        self.B.mul_(self.gamma).add_(r.T @ z, alpha=self.eta / z.shape[0])
+        if decay:
+            self.B.mul_(self.gamma)
+        self.B.add_(r.T @ z, alpha=self.eta / z.shape[0])
 
     @torch.no_grad()
     def reset(self) -> None:

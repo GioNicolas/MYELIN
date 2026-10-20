@@ -42,7 +42,7 @@ KL médio $D_{\text{KL}}(p_{24} \parallel p_4)$ na camada 4: **15,9 / 15,8 / 13,
 
 1. **Lidas direto pela cabeça final, as camadas 1–16 "não falam a língua" da camada final.** A concordância é de 0% e o KL fica em ~15. A camada 4 não está "quase certa, precisando de um ajuste"; ela está em outra representação. A concordância só passa de ~30% a partir da camada 21 de 24.
 2. **As camadas rasas ficam confiantes e erradas.** Na camada 4, 11–15% dos tokens têm estresse baixo, com **0% de precisão**: um Early-Exit Estático com esse portão erraria todos. Hipótese ainda não verificada: as camadas iniciais "ecoam" o token de entrada com alta certeza. Mesmo a camada 23 tem só 74–89% de precisão quando confiante.
-3. **O efeito do contexto existe no código, não na prosa.** Nos arquivos de código, as camadas finais melhoram bastante na 2ª metade sem sinapse nenhuma (camada 22 em `test_fast_synapse.py`: 29% → 57%). No README, nada muda. Em textos repetitivos, a atenção já copia padrões sozinha (*induction heads*), e o MYELIN precisa ganhar **além** dessa linha de base.
+3. **O efeito do contexto existe no código, não na prosa.** Nos arquivos de código, as camadas finais melhoram bastante na 2ª metade sem sinapse nenhuma (camada 22 em `test_fast_synapse.py`: 29% → 57%). No README, nada muda. Uma explicação provável (não testada) é que, em textos repetitivos, a atenção já copia padrões sozinha (*induction heads*). De todo modo, o MYELIN precisa ganhar **além** dessa linha de base.
 4. **τ = 0,3 não é trivial nem para a camada final:** ela só fica abaixo do limiar em 63–90% dos tokens.
 
 ## Consequências para o projeto
