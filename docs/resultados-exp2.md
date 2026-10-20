@@ -65,3 +65,16 @@ Interferência entre chaves, |c_tj|, mediana / 99% com r = 64:
 - **A hipótese central, na forma atual, é fraca neste cenário.** Mesmo o teto não paramétrico melhora pouco a camada 17 em textos em inglês e código. O contexto (atenção) do próprio modelo já captura a maior parte da repetição.
 - **Se a memória continuar, ela deve ser do tipo kNN:** só corrigir quando reconhece a situação. Uma versão de tamanho fixo é viável, com um buffer circular das últimas M consultas (M = 256 dá ~1,8 MB em fp32), e respeita o "memória nunca cresce". Mas aproxima o MYELIN do *neural cache* (Grave et al., 2017).
 - **Antes de decidir o rumo, falta medir o teto com mais professor.** Aqui só 1 em cada 8 tokens ensinou. Com o portão, 40–60% dos tokens acordam o córtex, então a memória teria muito mais exemplos.
+
+## Rodada 2b (a rodar)
+
+**Córtex a cada 2 tokens** (4× mais professor, perto do que o portão faria), com:
+- viés online;
+- r = 64 com chave centrada;
+- kNN exato;
+- **kNN de tamanho fixo** (as 256 últimas consultas, ~1,8 MB);
+- **viés + kNN 256** (correção global e, por cima, a de cada situação).
+
+As duas memórias novas também rodam a cada 8 tokens, para comparar com a rodada acima.
+
+**Pergunta:** o teto cresce com mais exemplos? Se o kNN passar a fechar bem mais que ~20% da distância até o modelo completo, a ideia continua, com memória do tipo kNN. Se não, a pergunta precisa mudar.

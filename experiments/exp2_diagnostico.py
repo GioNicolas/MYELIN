@@ -16,7 +16,9 @@ Memórias comparadas, todas lendo em cima do mesmo tradutor P_k:
                    h^(k-1) ou da saída h^(k) da camada k;
   - NLMS r=d     : posto completo (sem jogar fora parte da chave);
   - kNN          : memória exata dos pares (chave, correção), o teto não
-                   paramétrico (cresce com o texto, não é o MYELIN).
+                   paramétrico (cresce com o texto, não é o MYELIN);
+  - kNN 256      : o mesmo, guardando só as 256 últimas consultas (tamanho fixo);
+  - viés + kNN   : correção global e, por cima, a específica de cada situação.
 
 Resultado principal: diferença de NLL da camada rasa (próximo token real) na
 2ª metade de cada texto, em relação ao estático. Negativo = a memória ajudou.
@@ -40,13 +42,13 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from myelin import FastSynapse, KNNCache, StressGate, TunedLens, capture, simulate  # noqa: E402
+from myelin import FastSynapse, KNNCache, OnlineBias, StackedMemory, StressGate, TunedLens, capture, simulate  # noqa: E402
 from myelin.wrapper import fit_key_stats, hf_readout, key_interference, make_keys  # noqa: E402
 from textos import calibration_ids, eval_texts  # noqa: E402
 
 CONFIGS = [
     {"name": "estático", "memory": None, "key": "bias"},
-    {"name": "viés online", "memory": "nlms", "key": "bias", "rank": 16},
+    {"name": "viés online", "memory": "bias", "key": "bias"},
     {"name": "r=64 entrada centrada", "memory": "nlms", "key": "input-center", "rank": 64},
     {"name": "r=64 entrada fixa", "memory": "nlms", "key": "input-fixed", "rank": 64},
     {"name": "r=64 saída fixa", "memory": "nlms", "key": "output-fixed", "rank": 64},
@@ -54,12 +56,20 @@ CONFIGS = [
     {"name": "r=d saída fixa", "memory": "nlms", "key": "output-fixed", "rank": "d"},
     {"name": "kNN entrada fixa", "memory": "knn", "key": "input-fixed"},
     {"name": "kNN saída fixa", "memory": "knn", "key": "output-fixed"},
+    {"name": "kNN 256 saída fixa", "memory": "knn256", "key": "output-fixed"},
+    {"name": "viés + kNN 256 saída", "memory": "bias+knn256", "key": "output-fixed"},
 ]
 
 
 def build_memory(cfg: dict, d_model: int, eta: float):
     if cfg["memory"] == "knn":
         return KNNCache()
+    if cfg["memory"] == "knn256":
+        return KNNCache(capacity=256)
+    if cfg["memory"] == "bias":
+        return OnlineBias(d_model, eta=eta)
+    if cfg["memory"] == "bias+knn256":
+        return StackedMemory(OnlineBias(d_model, eta=eta), KNNCache(capacity=256))
     rank = d_model if cfg.get("rank") == "d" else cfg.get("rank", 16)
     return FastSynapse(d_model, d_model, rank=rank, eta=eta, gamma=1.0)
 
@@ -87,7 +97,7 @@ def print_summary(results: dict) -> None:
     groups = sorted({t["group"] for t in results["texts"].values()})
     print("\nResumo: ΔNLL médio da camada rasa na 2ª metade vs. estático (negativo = ajudou)")
     print(f"{'memória':<24} | " + " | ".join(f"{g:>10}" for g in groups) + f" | {'todos':>6} | melhorou em")
-    names = [cfg["name"] for cfg in CONFIGS[1:]]
+    names = [name for name in next(iter(results["texts"].values()))["runs"] if name != "estático"]
     for name in names:
         deltas = {g: [] for g in groups}
         for text in results["texts"].values():
@@ -110,6 +120,7 @@ def main() -> None:
     parser.add_argument("--eta", type=float, default=0.5)
     parser.add_argument("--blocks", type=int, default=8)
     parser.add_argument("--configs", nargs="*", help="nomes das memórias a rodar (padrão: todas)")
+    parser.add_argument("--tag", default="", help="sufixo do arquivo de resultados (não sobrescrever rodadas)")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "results")
     args = parser.parse_args()
@@ -181,7 +192,8 @@ def main() -> None:
 
     print_summary(results)
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = args.out_dir / f"exp2_{args.model.split('/')[-1]}_k{args.k}_every{args.teacher_every}.json"
+    tag = f"_{args.tag}" if args.tag else ""
+    out_file = args.out_dir / f"exp2_{args.model.split('/')[-1]}_k{args.k}_every{args.teacher_every}{tag}.json"
     out_file.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     print(f"\nResultados salvos em {out_file}")
 

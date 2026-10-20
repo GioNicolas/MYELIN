@@ -11,7 +11,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from myelin import FastSynapse, KNNCache, StressGate, TunedLens
+from myelin import FastSynapse, KNNCache, OnlineBias, StackedMemory, StressGate, TunedLens
 from myelin.wrapper import (
     KeyStats,
     LayerStates,
@@ -227,6 +227,26 @@ def test_memoria_exata_tambem_aprende_o_atalho():
     first, *_, last = log.blocks(5)
     assert first["exit_rate"] <= 0.5 and last["exit_rate"] > 0.9
     assert log.blocks(1)[0]["exit_precision"] > 0.95
+
+
+def test_memoria_exata_de_tamanho_fixo_guarda_as_ultimas():
+    cache = KNNCache(capacity=3)
+    keys = torch.eye(5, 8)
+    cache.consolidate(keys, torch.arange(5.0).unsqueeze(-1).expand(5, 8))
+    assert len(cache.keys) == 3
+    torch.testing.assert_close(cache(keys[4:]), torch.full((1, 8), 4.0), atol=1e-4, rtol=0)
+    assert torch.equal(cache(keys[:1]), torch.zeros(1, 8))  # esquecida: não reconhece mais
+
+
+def test_vies_mais_knn_corrige_o_residuo_inteiro():
+    memory = StackedMemory(OnlineBias(8, eta=0.5), KNNCache())
+    key, residual = torch.randn(1, 8), torch.randn(1, 8)
+    memory.consolidate(key, residual)
+    torch.testing.assert_close(memory.memories[0].b, 0.5 * residual[0])
+    torch.testing.assert_close(memory(key), residual)  # o kNN guarda a metade que o viés não cobriu
+    other = torch.randn(1, 8)
+    other = other - (other @ key.T) / (key @ key.T) * key  # chave ortogonal: só o viés vale
+    torch.testing.assert_close(memory(other), 0.5 * residual)
 
 
 def test_calendario_fixo_ignora_o_portao():
