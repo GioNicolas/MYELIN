@@ -12,7 +12,17 @@ import torch
 import torch.nn.functional as F
 
 from myelin import FastSynapse, StressGate, TunedLens
-from myelin.wrapper import LayerStates, capture, causal_center, hf_readout, rms_normalize, simulate
+from myelin.wrapper import (
+    LayerStates,
+    capture,
+    causal_center,
+    causal_standardize,
+    hf_readout,
+    key_similarity,
+    make_keys,
+    rms_normalize,
+    simulate,
+)
 
 D, VOCAB = 64, 64
 
@@ -42,12 +52,38 @@ def test_centro_causal_usa_so_o_passado():
         torch.testing.assert_close(centered[t], h[t] - h[:t].mean(0))
 
 
+def test_padronizacao_causal_usa_so_ate_t():
+    h = torch.randn(6, 4) * torch.tensor([1.0, 10.0, 100.0, 1000.0])
+    standardized = causal_standardize(h)
+    assert torch.equal(standardized[0], torch.zeros(4))
+    for t in range(1, 6):
+        past = h[: t + 1].double()
+        expected = (past[-1] - past.mean(0)) / (past.var(0, unbiased=False) + 1e-5).sqrt()
+        torch.testing.assert_close(standardized[t], expected.float())
+
+
+def test_padronizar_tira_o_dominio_de_uma_dimensao_gigante():
+    g = torch.Generator().manual_seed(0)
+    h = torch.randn(200, 32, generator=g)
+    h[:, 0] += 1000.0 * (torch.rand(200, generator=g) < 0.3)  # ativação gigante em 30% dos tokens
+    # Centrar piora: todo token passa a desviar muito da média nessa dimensão,
+    # e todas as chaves ficam quase paralelas. Padronizar resolve.
+    assert key_similarity(make_keys(h, "center")) > 0.9
+    assert key_similarity(make_keys(h, "standardize")) < 0.2 < key_similarity(make_keys(h, "raw"))
+
+
+def test_modo_de_chave_desconhecido():
+    with pytest.raises(ValueError):
+        make_keys(torch.randn(3, 4), "whiten")
+
+
 def test_captura_bate_com_o_modelo(tiny_qwen):
     ids = torch.randint(96, (1, 20), generator=torch.Generator().manual_seed(1))
     k = 2
-    states = capture(tiny_qwen, ids, k, center_keys=False)
+    states = capture(tiny_qwen, ids, k, key_mode="raw")
     out = tiny_qwen(ids, output_hidden_states=True)
 
+    torch.testing.assert_close(states.h_in, out.hidden_states[k - 1][0])
     torch.testing.assert_close(states.key, rms_normalize(out.hidden_states[k - 1][0]))
     torch.testing.assert_close(states.shallow, out.hidden_states[k][0])
     # O alvo é o estado final antes do Norm: relido pela cabeça, dá os logits finais.
@@ -96,8 +132,10 @@ def synthetic_text(n_patterns: int = 8, repeats: int = 10, noise: float = 0.05, 
     target = rms_normalize(head[answers][order])
     final_logits = readout(target)
     next_ids = final_logits.argmax(-1)
+    h_in = jitter(keys)
     states = LayerStates(
-        key=rms_normalize(jitter(keys)),
+        h_in=h_in,
+        key=rms_normalize(h_in),
         shallow=jitter(shallow),
         target=target,
         final_top=final_logits.argmax(-1),

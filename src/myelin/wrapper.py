@@ -9,7 +9,7 @@ de verdade ficaria faltando para os tokens seguintes.
 
 Leitura da camada rasa, com a Sinapse Rápida "em cima da tradução" P_k:
 
-    q_t   = P_k(h_t^(k)) + B (A^T key_t)          key_t = h_t^(k-1) centrado e normalizado
+    q_t   = P_k(h_t^(k)) + B (A^T key_t)          key_t = h_t^(k-1) padronizado e normalizado (ver make_keys)
     p_t^k = Softmax(W_head · Norm(q_t))
 
 Mielinização, quando o córtex acordou: o alvo é a direção do estado final
@@ -52,12 +52,59 @@ def causal_center(h: torch.Tensor) -> torch.Tensor:
     return torch.cat([h[:1], h[1:] - past_mean])
 
 
+def causal_standardize(h: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
+    """Padroniza cada dimensão pela média e desvio de h_0..h_t (inclui o próprio t).
+
+    Diferente de `causal_center`, também divide cada dimensão pelo seu desvio:
+    as poucas dimensões com ativações gigantes (que no Qwen aparecem só em
+    alguns tokens, como o primeiro) têm desvio enorme e deixam de dominar a
+    chave. O token 0 vira o vetor nulo (nada a comparar ainda) e não ensina.
+    """
+    h64 = h.double()
+    counts = torch.arange(1, h.shape[0] + 1, device=h.device, dtype=torch.float64).unsqueeze(-1)
+    mean = h64.cumsum(0) / counts
+    var = (h64.pow(2).cumsum(0) / counts - mean.pow(2)).clamp_min(0.0)
+    return ((h64 - mean) / (var + eps).sqrt()).to(h.dtype)
+
+
+KEY_MODES = ("raw", "center", "standardize")
+
+
+def make_keys(h_in: torch.Tensor, mode: str = "standardize") -> torch.Tensor:
+    """Chaves da sinapse a partir da entrada crua da camada k, normalizadas por RMS.
+
+    raw: só normaliza; center: subtrai a média causal; standardize: padroniza
+    cada dimensão de forma causal.
+    """
+    if mode == "raw":
+        return rms_normalize(h_in)
+    if mode == "center":
+        return rms_normalize(causal_center(h_in))
+    if mode == "standardize":
+        return rms_normalize(causal_standardize(h_in))
+    raise ValueError(f"modo de chave desconhecido {mode!r}; use {KEY_MODES}")
+
+
+def key_similarity(key: torch.Tensor, n_pairs: int = 4000, skip: int = 8, seed: int = 0) -> float:
+    """|cos| médio entre chaves de pares de tokens sorteados (ignorando os `skip` primeiros).
+
+    Perto de 0: chaves distintas, cada consolidação mexe só no seu token.
+    Perto de 1: chaves quase paralelas, cada consolidação vale para o texto todo.
+    """
+    k = F.normalize(key[skip:].float(), dim=-1)
+    g = torch.Generator().manual_seed(seed)
+    i, j = torch.randint(len(k), (2, n_pairs), generator=g)
+    distinct = i != j
+    return (k[i[distinct]] * k[j[distinct]]).sum(-1).abs().mean().item()
+
+
 @dataclass
 class LayerStates:
     """O que a simulação precisa de um texto, para uma camada rasa k.
 
     Atributos (T = número de tokens, d = dimensão do modelo):
-        key: chaves da sinapse, h^(k-1) centrado e normalizado, (T, d).
+        h_in: entrada crua da camada k, h^(k-1), (T, d).
+        key: chaves da sinapse, feitas de h_in por `make_keys`, (T, d).
         shallow: estado raso traduzido P_k(h^(k)), sem a sinapse, (T, d).
         target: direção do estado final, h^(L) / rms(h^(L)), antes do Norm, (T, d).
         final_top: top-1 da camada final, (T,).
@@ -66,6 +113,7 @@ class LayerStates:
         k, n_layers: camada rasa e total de camadas do modelo.
     """
 
+    h_in: torch.Tensor
     key: torch.Tensor
     shallow: torch.Tensor
     target: torch.Tensor
@@ -83,7 +131,7 @@ def hf_readout(model) -> Readout:
 
 @torch.no_grad()
 def capture(
-    model, input_ids: torch.Tensor, k: int, lens: TunedLens | None = None, center_keys: bool = True
+    model, input_ids: torch.Tensor, k: int, lens: TunedLens | None = None, key_mode: str = "standardize"
 ) -> LayerStates:
     """Roda o modelo congelado uma vez e guarda só o que a camada k precisa.
 
@@ -92,7 +140,7 @@ def capture(
         input_ids: (1, T).
         k: camada rasa, 1..L-1.
         lens: tradutor P_k; None = logit lens (P_k = identidade).
-        center_keys: centra as chaves pela média causal (ver `causal_center`).
+        key_mode: como fazer as chaves da sinapse (ver `make_keys`).
     """
     n_layers = model.config.num_hidden_layers
     if not 1 <= k < n_layers:
@@ -107,7 +155,6 @@ def capture(
 
     # hidden_states[0] é o embedding; [ℓ] é a saída da camada ℓ (= entrada da ℓ+1).
     h_in, h_k = out.hidden_states[k - 1][0].float(), out.hidden_states[k][0].float()
-    key = rms_normalize(causal_center(h_in) if center_keys else h_in)
     shallow = h_k if lens is None else lens(k, h_k)
 
     logits = out.logits[0].float()
@@ -116,7 +163,8 @@ def capture(
     final_nll[:-1] = F.cross_entropy(logits[:-1], next_ids[:-1], reduction="none")
 
     return LayerStates(
-        key=key,
+        h_in=h_in,
+        key=make_keys(h_in, key_mode),
         shallow=shallow,
         target=rms_normalize(captured["h_final"][0].float()),
         final_top=logits.argmax(-1),
