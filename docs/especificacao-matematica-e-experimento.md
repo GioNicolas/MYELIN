@@ -36,6 +36,8 @@ $$\mathcal{S}_t = -\frac{1}{\log |V|} \sum_{v \in V} p_t^{(k)}(v) \log p_t^{(k)}
     O sinal sobe pelo **Córtex Profundo** (camadas $k+1$ até $L$), produzindo o estado final verdadeiro $\mathbf{h}_t^{(L)}$ e a distribuição de elite $p_t^{(L)}$.
 
 > **Atualização (Experimento 0, 19/10/2026):** no Qwen2.5-0.5B, ler $\hat{\mathbf{h}}_t^{(k)}$ direto pela cabeça compartilhada (sem $P_k$) dá 0% de concordância com a camada final até a camada 16, e as camadas rasas ainda ficam confiantes e erradas. O projetor $P_k$ (*tuned lens*, treinado uma vez e congelado) passa a ser **obrigatório**: $p_t^{(k)} = \operatorname{Softmax}(\mathbf{W}_{\text{head}} \cdot \operatorname{Norm}(P_k(\hat{\mathbf{h}}_t^{(k)})))$, e o k e a calibração do estresse serão definidos pelo Experimento 0b. Detalhes em [resultados-exp0.md](resultados-exp0.md).
+>
+> **Experimento 0b (20/10/2026):** com $P_k$, a concordância passa de 50% a partir da camada 17 de 24 (k inicial = 17), mas a entropia com τ = 0,3 ainda não é confiável: os tokens confiantes da camada 17 acertam só 59–79%. O portão precisa de calibração por camada.
 
 ---
 

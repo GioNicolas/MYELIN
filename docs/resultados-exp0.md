@@ -1,6 +1,6 @@
 # Resultados — Experimento 0: o quanto cada camada já sabe a resposta final?
 
-**Data:** 19 de outubro de 2026  
+**Data:** 19–20 de outubro de 2026  
 **Modelo:** `Qwen/Qwen2.5-0.5B` (24 camadas), pesos congelados, CPU do Google Colab (~13 min)  
 **Script:** [`experiments/exp0_profundidade_por_camada.py`](../experiments/exp0_profundidade_por_camada.py) · **Notebook:** [`notebooks/exp0_profundidade_por_camada.ipynb`](../notebooks/exp0_profundidade_por_camada.ipynb)  
 **Leitura das camadas:** *logit lens*, ou seja, `lm_head(norm(h_ℓ))`: o estado da camada ℓ lido direto pela cabeça final, sem tradutor.  
@@ -78,26 +78,86 @@ O mesmo padrão aparece num modelo 3× maior:
 | 26 | 53% → 65% | 58% → 68% | 43% → 36% | 50% → 40% |
 | 27 | 71% → 81% | 76% → 82% | 62% → 65% | 68% → 69% |
 
-## Experimento 0b, parcial: treino do tradutor no 0.5B
+## Experimento 0b: as camadas lidas pelo tradutor $P_k$ (Qwen2.5-0.5B)
 
-O tradutor $P_k$ do Qwen2.5-0.5B foi treinado (500 passos, GPU T4). A medição com ele no notebook falhou sem mostrar o erro e será refeita. O KL no corpus de treino (WikiText-2 + código) caiu bastante:
+**Tradutor:** *tuned lens* treinado por 500 passos (GPU T4), com corpus metade WikiText-2 (inglês) e metade código Python da biblioteca `transformers`. Depois de treinado, fica congelado.
+**Medição:** os mesmos 3 textos e o mesmo τ = 0,3 do Experimento 0, rodando na CPU do Colab.
+**Leitura:** `lm_head(norm(P_ℓ(h_ℓ)))`.
+**JSON:** `exp0_Qwen2.5-0.5B_tunedlens.json`, salvo no Drive.
 
-| Camada (de 24) | 4 | 8 | 12 | 16 | 18 | 20 | 22 | 23 |
+### Concordância com a camada final (1ª → 2ª metade), sem → com tradutor
+
+| Camada (de 24) | `fast_synapse.py` sem | **com** | `test_fast_synapse.py` sem | **com** | `README.md` sem | **com** |
+|---:|---|---|---|---|---|---|
+| 4 | 0% → 0% | **13% → 25%** | 0% → 0% | **12% → 28%** | 0% → 0% | **4% → 4%** |
+| 8 | 0% → 0% | 16% → 30% | 0% → 0% | 18% → 32% | 0% → 0% | 5% → 4% |
+| 12 | 0% → 0% | 18% → 35% | 0% → 0% | 21% → 38% | 1% → 0% | 7% → 6% |
+| 16 | 1% → 0% | 25% → 43% | 0% → 0% | 26% → 45% | 2% → 1% | 11% → 7% |
+| **17** | — | **39% → 58%** | — | **34% → 61%** | — | **18% → 15%** |
+| 18 | 5% → 4% | 40% → 58% | 3% → 4% | 34% → 60% | 1% → 2% | 18% → 16% |
+| 20 | 16% → 19% | 44% → 65% | 9% → 19% | 37% → 65% | 6% → 5% | 22% → 18% |
+| 21 | 29% → 33% | 50% → 74% | 20% → 35% | 47% → 78% | 15% → 9% | 30% → 28% |
+| 22 | 44% → 57% | 58% → 79% | 29% → 57% | 52% → 81% | 22% → 21% | 38% → 39% |
+| 23 | 64% → 77% | 68% → 84% | 57% → 80% | 67% → 89% | 51% → 52% | 57% → 58% |
+
+(— = a camada 17 não foi transcrita na tabela do Experimento 0.)
+
+### Calibração: precisão quando S ≤ τ (1ª → 2ª metade), com tradutor
+
+| Camada | `fast_synapse.py` | `test_fast_synapse.py` | `README.md` | Sem tradutor (`fast_synapse.py`) |
+|---:|---|---|---|---|
+| 4 | 39% → 59% | 39% → 62% | 15% → 19% | 0% → 0% |
+| 12 | 46% → 64% | 50% → 65% | 21% → 14% | 0% → 0% |
+| 17 | 68% → 79% | 59% → 77% | 33% → 38% | — |
+| 20 | 72% → 85% | 62% → 81% | 47% → 35% | 33% → 57% |
+| 22 | 82% → 89% | 75% → 89% | 60% → 69% | 81% → 79% |
+| 23 | 87% → 91% | 84% → 93% | 76% → 80% | 86% → 89% |
+
+### KL médio $D_{\text{KL}}(p_{24} \parallel p_\ell)$ com tradutor: treino vs. avaliação
+
+| Camada | 4 | 12 | 16 | 17 | 18 | 20 | 22 | 23 |
 |---|---|---|---|---|---|---|---|---|
-| KL com tradutor (treino, último log) | 2,98 | 2,54 | 2,27 | 1,76 | 1,07 | 0,81 | 0,35 | 0,18 |
-| KL sem tradutor (`fast_synapse.py`, Exp. 0) | 15,9 | 15,6 | 15,4 | 13,4 | 10,7 | 7,3 | 2,8 | 0,9 |
+| treino (WikiText + código, último log) | 2,98 | 2,27 | 1,76 | — | 1,07 | 0,81 | 0,35 | 0,18 |
+| `fast_synapse.py` | 5,34 | 4,51 | 3,88 | 2,90 | 2,65 | 2,27 | 1,06 | 0,51 |
+| `README.md` | 7,70 | 7,02 | 6,33 | 5,50 | 5,11 | 4,55 | 2,33 | 0,90 |
 
-Leitura preliminar: com o tradutor, a camada 18 fica com KL parecido ao da camada 23 sem tradutor, um ganho de ~5 camadas. A camada 4 continua longe (KL ~3). Ressalvas:
+### Achados
 
-- os KLs vêm de corpora diferentes (treino vs. textos de avaliação);
-- o treino ainda não tinha convergido (o KL médio seguia caindo, 2,09 → 2,00 nos últimos logs);
-- concordância e calibração só saem da medição com o tradutor.
+1. **O tradutor funciona.**
+   - As camadas rasas passam a falar a língua da final. A camada 4 vai de 0% para 12–28% de concordância no código, e a 18 vai de ~5% para 34–60%.
+   - Elas deixam de ser confiantes e erradas: na camada 4, a precisão com S ≤ τ sobe de **0% para 39–62%**.
+2. **Há um salto entre as camadas 16 e 17.**
+   - O KL cai de 3,88 para 2,90 e a concordância sobe ~14 pontos de uma vez, nos dois arquivos de código.
+   - A partir da 17, a concordância passa de 50% na 2ª metade dos textos de código.
+   - A camada 17 é o candidato natural a k.
+3. **O portão de estresse ainda não é confiável.**
+   - A precisão com S ≤ τ só chega a 90% na camada 23 (2ª metade).
+   - Na camada 17, os tokens confiantes acertam só 59–79%.
+   - Um Early-Exit Estático com entropia e τ = 0,3 erraria de 1 a cada 5 a 2 a cada 5 saídas.
+4. **O efeito do contexto aparece em todas as camadas, mas só no código.**
+   - Sem sinapse nenhuma, a 2ª metade do código é bem melhor (camada 4: 13% → 25%; camada 17: 39% → 58%).
+   - É a linha de base exata que o MYELIN precisa superar: Early-Exit Estático com o mesmo $P_k$.
+   - No README, nada muda.
+5. **O tradutor não generaliza para português.**
+   - No README, a camada 17 concorda só 15–18% e o KL é 5,5. O corpus de treino não tinha português.
+   - Mesmo no código, o KL de avaliação é ~2× o de treino (os arquivos do MYELIN têm comentários em português).
 
-## Próximo passo: Experimento 0b
+### Consequências para o projeto
 
-Treinar $P_k$ para cada camada ([`experiments/exp0b_tuned_lens.py`](../experiments/exp0b_tuned_lens.py)) e repetir esta tabela com ele ([`notebooks/exp0b_tuned_lens.ipynb`](../notebooks/exp0b_tuned_lens.ipynb), GPU no Colab ou no Kaggle). As perguntas são:
+- **k = 17 de 24** como ponto de partida (com k = 12 como comparação, onde sobra mais espaço para a sinapse aprender).
+- **A economia realista é menor que a do README:** cada token que sai na camada 17 economiza 7 de 24 camadas (~29%), não "28 camadas". O número final depende de quantos tokens saem.
+- **O portão precisa de calibração própria**, por exemplo:
+  - τ escolhido por camada para uma precisão-alvo (curva precisão × cobertura);
+  - margem entre os 2 maiores candidatos;
+  - verificações aleatórias acordando o córtex mesmo com estresse baixo.
+- **Retreinar o tradutor com texto em português**, ou avaliar em textos em inglês, antes de tirar conclusões sobre prosa.
+- **Pergunta do H1/H2:** a sinapse rápida, em cima de $P_{17}$, sobe a concordância e a calibração da camada 17 **além** do que o contexto sozinho já dá?
 
-- em que camada a concordância passa de ~50%;
-- se a precisão com S ≤ τ fica acima de 90%.
+## Próximo passo: a Curva de Mielinização no modelo real
 
-As respostas definem o k e se o portão de estresse é confiável.
+`src/myelin/wrapper.py` em modo simulação (o modelo roda inteiro, e o portão só decide qual previsão contaria) e o notebook da Curva de Mielinização. Ele compara, no mesmo texto e com o mesmo $P_k$:
+
+- Early-Exit Estático ($\Delta W_k = 0$);
+- MYELIN (sinapse viva).
+
+As métricas são a taxa de saída, a concordância com a final e a precisão das saídas ao longo do texto.
