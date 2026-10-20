@@ -66,7 +66,7 @@ Como ler as colunas:
    - O Qwen tem dimensões com ativações gigantes que aparecem só em alguns tokens.
    - Ao subtrair a média, **todo** token passa a desviar muito dela nessas dimensões, e todas as chaves apontam praticamente para o mesmo lado. Num teste sintético com uma dimensão gigante em 30% dos tokens, o |cos| médio entre chaves foi 0,27 com as chaves cruas, **1,00** centradas e 0,14 padronizadas.
    - Com chaves paralelas, cada consolidação vale para o texto inteiro: a camada rasa passa a repetir, com confiança, a resposta do último token que o córtex ensinou. No código, isso é frequente (quebras de linha, indentação).
-   - Hipótese a confirmar na rodada 2, que mede o |cos| no Qwen real.
+   - **Refutada pelo Experimento 2:** no calendário fixo, as mesmas chaves centradas ajudam nos 7 textos, e no Qwen real elas não são quase paralelas. O colapso vem do laço de seleção do portão.
 
 ## Revisão externa da rodada 1
 
@@ -108,7 +108,7 @@ O que pode ser novo é a **autodestilação online e seletiva** do professor pro
 
 Uma sugestão de rumo (Antigravity) é usar a camada rasa + MYELIN como **rascunho em decodificação especulativa**: o modelo completo verifica todos os tokens, o que resolve ao mesmo tempo o KV cache, o travamento e a qualidade. Antes de seguir por aí, é preciso verificar trabalhos próximos que já atualizam o rascunho online, como *Online Speculative Decoding* (Liu et al., 2023), e que usam saída cedo como rascunho, como *Kangaroo* (2024) e *Draft & Verify* (Zhang et al., 2023).
 
-## Experimento 2: a memória aprende algo útil antes do portão? (a rodar)
+## Experimento 2: a memória aprende algo útil antes do portão? (resultados em [resultados-exp2.md](resultados-exp2.md))
 
 [`experiments/exp2_diagnostico.py`](../experiments/exp2_diagnostico.py) · [`notebooks/exp2_diagnostico.ipynb`](../notebooks/exp2_diagnostico.ipynb)
 
