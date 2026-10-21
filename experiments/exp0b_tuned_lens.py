@@ -6,17 +6,23 @@ minimizando D_KL(p_L || p_ℓ). Depois, o Experimento 0 roda de novo com
 --lens para ver em que camada a previsão traduzida passa a concordar com a
 final e se o estresse fica calibrado.
 
-Corpus de treino (nunca inclui os textos de avaliação do Experimento 0):
-metade prosa em inglês (WikiText-2) e metade código Python (arquivos da
-própria biblioteca transformers instalada).
+Corpus de treino (nunca inclui os textos de avaliação):
+  - "en-py" (padrão, Experimento 0b): metade prosa em inglês (WikiText-2) e
+    metade código Python (arquivos da própria biblioteca transformers).
+  - "multi" (controle do Experimento 4): o mesmo en-py em metade dos tokens,
+    mais Wikipedia em pt/es/de/fr e código Rust/Go/JavaScript de projetos que
+    NÃO estão na avaliação. Pergunta: com um tradutor amplo, o ganho do MYELIN
+    fora do domínio sobrevive, ou era só compensação de um tradutor estreito?
 
     python experiments/exp0b_tuned_lens.py --model Qwen/Qwen2.5-0.5B --out-dir results
+    python experiments/exp0b_tuned_lens.py --corpus multi --out-dir results
 """
 
 from __future__ import annotations
 
 import argparse
 import random
+import subprocess
 import sys
 import time
 from collections.abc import Iterator
@@ -33,28 +39,72 @@ sys.path.insert(0, str(ROOT / "src"))
 from myelin import TunedLens  # noqa: E402
 
 
-def build_corpus(tokenizer, max_tokens: int, seed: int = 0) -> torch.Tensor:
-    """Fluxo 1-D de tokens: metade WikiText-2 (prosa), metade código Python."""
+# Projetos de código do corpus "multi": licenças permissivas e nenhum deles na
+# avaliação (lá estão rust-lang/rust, golang/go e expressjs/express).
+CODE_REPOS = {
+    ".rs": ["BurntSushi/ripgrep", "serde-rs/serde", "tokio-rs/tokio"],
+    ".go": ["spf13/cobra", "gin-gonic/gin", "urfave/cli"],
+    ".js": ["axios/axios", "jquery/jquery", "moment/moment"],
+}
+WIKI_LANGS = ["pt", "es", "de", "fr"]
+
+
+def _take(tokenizer, documents: Iterator[str], budget: int) -> list[int]:
+    """Tokeniza documentos (separados por EOS) até juntar `budget` tokens."""
+    ids: list[int] = []
+    for doc in documents:
+        ids += tokenizer(doc).input_ids + [tokenizer.eos_token_id]
+        if len(ids) >= budget:
+            break
+    return ids[:budget]
+
+
+def _en_py_documents(seed: int) -> tuple[list[str], Iterator[str]]:
     from datasets import load_dataset
 
     lines = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="train")["text"]
     prose = ["".join(lines[i : i + 200]) for i in range(0, len(lines), 200)]
     code_files = sorted(Path(transformers.__file__).parent.rglob("*.py"))
-    rng = random.Random(seed)
-    rng.shuffle(code_files)
+    random.Random(seed).shuffle(code_files)
+    return prose, (path.read_text(encoding="utf-8", errors="ignore") for path in code_files)
 
-    def take(documents: Iterator[str], budget: int) -> list[int]:
-        ids: list[int] = []
-        for doc in documents:
-            ids += tokenizer(doc).input_ids + [tokenizer.eos_token_id]
-            if len(ids) >= budget:
-                break
-        return ids[:budget]
 
-    code = (path.read_text(encoding="utf-8", errors="ignore") for path in code_files)
-    prose_ids = take(iter(prose), max_tokens // 2)
-    code_ids = take(code, max_tokens - len(prose_ids))
+def build_corpus(tokenizer, max_tokens: int, seed: int = 0) -> torch.Tensor:
+    """Fluxo 1-D de tokens: metade WikiText-2 (prosa), metade código Python."""
+    prose, code = _en_py_documents(seed)
+    prose_ids = _take(tokenizer, iter(prose), max_tokens // 2)
+    code_ids = _take(tokenizer, code, max_tokens - len(prose_ids))
     return torch.tensor(prose_ids + code_ids)
+
+
+def _wikipedia(lang: str, min_chars: int = 2000) -> Iterator[str]:
+    from datasets import load_dataset
+
+    for article in load_dataset("wikimedia/wikipedia", f"20231101.{lang}", split="train", streaming=True):
+        if len(article["text"]) >= min_chars:
+            yield article["text"]
+
+
+def _repo_files(extension: str, cache: Path, seed: int) -> Iterator[str]:
+    files = []
+    for repo in CODE_REPOS[extension]:
+        target = cache / repo.replace("/", "__")
+        if not target.exists():
+            subprocess.run(["git", "clone", "-q", "--depth", "1", f"https://github.com/{repo}.git", str(target)], check=True)
+        files += sorted(path for path in target.rglob(f"*{extension}") if ".git" not in path.parts)
+    random.Random(seed).shuffle(files)
+    return (path.read_text(encoding="utf-8", errors="ignore") for path in files)
+
+
+def build_multi_corpus(tokenizer, max_tokens: int, seed: int = 0, cache: Path = ROOT / ".cache" / "code") -> torch.Tensor:
+    """Metade en-py (como build_corpus); a outra metade dividida entre pt/es/de/fr e Rust/Go/JS."""
+    cache.mkdir(parents=True, exist_ok=True)
+    prose, code = _en_py_documents(seed)
+    ids = _take(tokenizer, iter(prose), max_tokens // 4) + _take(tokenizer, code, max_tokens // 4)
+    sources = [_wikipedia(lang) for lang in WIKI_LANGS] + [_repo_files(ext, cache, seed) for ext in CODE_REPOS]
+    for source in sources:
+        ids += _take(tokenizer, source, max_tokens // (2 * len(sources)))
+    return torch.tensor(ids)
 
 
 def batch_stream(
@@ -134,6 +184,7 @@ def main() -> None:
     parser.add_argument("--seq-len", type=int, default=512)
     parser.add_argument("--loss-positions", type=int, default=512)
     parser.add_argument("--corpus-tokens", type=int, default=3_000_000)
+    parser.add_argument("--corpus", choices=["en-py", "multi"], default="en-py")
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "results")
@@ -148,8 +199,12 @@ def main() -> None:
     n_layers, d_model = model.config.num_hidden_layers, model.config.hidden_size
     print(f"Modelo {args.model}: {n_layers} camadas, d={d_model}, device={args.device}")
 
-    corpus = build_corpus(tokenizer, args.corpus_tokens)
-    print(f"Corpus: {len(corpus):,} tokens (metade WikiText-2, metade código Python)")
+    if args.corpus == "multi":
+        corpus = build_multi_corpus(tokenizer, args.corpus_tokens)
+        print(f"Corpus: {len(corpus):,} tokens (1/4 WikiText-2, 1/4 Python, 1/2 Wikipedia pt/es/de/fr e Rust/Go/JS)")
+    else:
+        corpus = build_corpus(tokenizer, args.corpus_tokens)
+        print(f"Corpus: {len(corpus):,} tokens (metade WikiText-2, metade código Python)")
 
     lens = TunedLens(n_layers, d_model).to(args.device)
     history = train_lens(
@@ -163,8 +218,9 @@ def main() -> None:
     )
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = args.out_dir / f"tuned_lens_{args.model.split('/')[-1]}.pt"
-    lens.save(out_file, model=args.model, steps=args.steps, kl_history=history)
+    suffix = "_multi" if args.corpus == "multi" else ""
+    out_file = args.out_dir / f"tuned_lens_{args.model.split('/')[-1]}{suffix}.pt"
+    lens.save(out_file, model=args.model, steps=args.steps, corpus=args.corpus, kl_history=history)
     print(f"\nKL final por camada: {' '.join(f'{kl:.2f}' for kl in history[-1])}")
     print(f"Tradutor salvo em {out_file}")
 

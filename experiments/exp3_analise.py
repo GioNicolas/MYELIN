@@ -24,13 +24,17 @@ def _interp(x: float, xs: list[float], ys: list[float]) -> float:
     return float(np.interp(x, xs, ys))
 
 
+def gaps_vs_reference(run: dict, reference: dict, taus: list[str]) -> list[float]:
+    """ΔNLL(run) − ΔNLL(referência interpolada na mesma taxa de saída), um valor por τ dentro da faixa."""
+    xs = [reference[t]["exit_rate"] for t in taus]
+    ys = [reference[t]["delta_nll"] for t in taus]
+    gaps = [m["delta_nll"] - _interp(m["exit_rate"], xs, ys) for m in run.values()]
+    return [g for g in gaps if g == g]
+
+
 def gains_at_equal_exit(text: dict, taus: list[str], name: str) -> list[float]:
     """ΔNLL(config) − ΔNLL(estático interpolado), um valor por τ dentro da faixa do estático."""
-    static = text["runs"]["estático"]
-    xs = [static[t]["exit_rate"] for t in taus]
-    ys = [static[t]["delta_nll"] for t in taus]
-    gaps = [m["delta_nll"] - _interp(m["exit_rate"], xs, ys) for m in text["runs"][name].values()]
-    return [g for g in gaps if g == g]
+    return gaps_vs_reference(text["runs"][name], text["runs"]["estático"], taus)
 
 
 def analyze(results: dict) -> None:
