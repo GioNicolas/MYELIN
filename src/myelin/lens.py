@@ -45,5 +45,5 @@ class TunedLens(nn.Module):
     def load(cls, path: str | Path, map_location: str | torch.device = "cpu") -> TunedLens:
         checkpoint = torch.load(path, map_location=map_location)
         lens = cls(checkpoint["n_layers"], checkpoint["d_model"])
-        lens.load_state_dict(checkpoint["state_dict"])
-        return lens
+        lens.load_state_dict(checkpoint["state_dict"])  # copia para os pesos do módulo, criados na CPU
+        return lens.to(map_location)
