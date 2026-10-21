@@ -11,7 +11,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from myelin import FastSynapse, KNNCache, OnlineBias, StackedMemory, StressGate, TunedLens
+from myelin import FastSynapse, KNNCache, NeuralCache, OnlineBias, StackedMemory, StressGate, TunedLens
 from myelin.wrapper import (
     KeyStats,
     LayerStates,
@@ -308,3 +308,31 @@ def test_blocos_resumem_o_texto():
     rows = simulate(states, readout, FastSynapse(D, D), StressGate()).blocks(4)
     assert [row["tokens"] for row in rows] == [20, 20, 20, 20]
     assert all(17 <= row["depth"] <= 24 for row in rows)
+
+
+def test_cache_neural_sem_peso_e_o_estatico():
+    states, readout = synthetic_text()
+    gate = StressGate(tau=0.5)
+    cached = simulate(states, readout, FastSynapse(D, D), gate, learn=False, cache=NeuralCache(lam=0.0))
+    static = simulate(states, readout, FastSynapse(D, D), gate, learn=False)
+    assert torch.equal(cached.exit, static.exit)
+    torch.testing.assert_close(cached.nll, static.nll, equal_nan=True)
+
+
+def test_cache_neural_aprende_a_repeticao_sem_o_cortex():
+    states, readout = synthetic_text(n_patterns=8, repeats=10)
+    gate = StressGate(tau=0.0)  # o córtex sempre acorda, mas o cache não precisa dele
+    cached = simulate(states, readout, FastSynapse(D, D), gate, learn=False, cache=NeuralCache(lam=0.5))
+    static = simulate(states, readout, FastSynapse(D, D), gate, learn=False)
+    *_, last = cached.blocks(5)
+    assert last["shallow_agree"] == 1.0
+    assert last["shallow_ppl"] < 0.5 * static.blocks(5)[-1]["shallow_ppl"]
+
+
+def test_cache_neural_guarda_so_os_ultimos_e_ignora_o_ultimo_token():
+    cache = NeuralCache(lam=1.0, capacity=2)
+    cache.add(torch.eye(4, 8), torch.tensor([3, 1, 2, -1]))
+    assert cache.ids.tolist() == [1, 2]
+    log_p = cache.mix(torch.eye(4, 8)[1:2], torch.zeros(1, 5))
+    assert log_p.exp().sum().item() == pytest.approx(1.0)
+    assert log_p.argmax(-1).item() == 1

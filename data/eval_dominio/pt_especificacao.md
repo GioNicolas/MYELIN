@@ -1,0 +1,106 @@
+# Especificação Matemática, Hipóteses e Plano Experimental — MYELIN
+
+**Projeto:** **MYELIN** (*Memory-Yielded Early-Layer Inference Network*)  
+**Autor:** Giorgio Nicolas de A. Bertino  
+**Data:** 19 de outubro de 2026
+
+---
+
+## 1. Formulação Matemática das 3 Peças do Algoritmo
+
+Considere uma rede Transformer pré-treinada com $L$ camadas (ex.: $L = 28$ ou $32$) cujos pesos originais estão **100% congelados**. Escolhemos uma camada rasa $k \ll L$ (ex.: $k = 4$ ou $k = 6$) como o nosso **Nó de Reflexo (Cerebelo)**.
+
+### Peça 1: A Mochila de Sinapses Rápidas ($\Delta W_k$)
+Na camada rasa $k$, acoplamos em paralelo ao bloco original congelado $f_k(\mathbf{h})$ um adaptador sináptico ultraleve de posto baixo (*Fast-Weight Low-Rank Synapse*, com dimensão interna $r \ll d$, ex.: $r = 16$):
+
+$$\hat{\mathbf{h}}_t^{(k)} = f_k\left(\mathbf{h}_t^{(k-1)}\right) + \underbrace{\mathbf{B}_k \left(\mathbf{A}_k^\top \mathbf{h}_t^{(k-1)}\right)}_{\text{Sinapse Rápida } \Delta W_k(\mathbf{h})}$$
+
+* No início de uma sessão ($t = 0$), $\mathbf{B}_k = \mathbf{0}$, de modo que a rede se comporta exatamente como o modelo original de fábrica.
+* O tamanho de $(\mathbf{A}_k, \mathbf{B}_k)$ é fixo e minúsculo (menos de $0.5\%$ dos parâmetros de uma camada, ~1 a 2 MB). **Nunca cresce com o tempo.**
+
+---
+
+### Peça 2: O Medidor de "Estresse" ($\mathcal{S}_t$) e Portão de Decisão
+A partir do estado da camada rasa $\hat{\mathbf{h}}_t^{(k)}$, aplicamos a cabeça de leitura (*LM Head* compartilhada do próprio modelo ou um projetor leve $P_k$) para obter a distribuição rápida de probabilidades sobre a próxima palavra:
+
+$$p_t^{(k)} = \operatorname{Softmax}\left(\mathbf{W}_{\text{head}} \cdot \operatorname{Norm}\left(\hat{\mathbf{h}}_t^{(k)}\right)\right)$$
+
+Definimos o **Índice de Estresse Sináptico** $\mathcal{S}_t \in [0, 1]$ como a entropia normalizada (ou margem de incerteza entre os 2 maiores candidatos):
+
+$$\mathcal{S}_t = -\frac{1}{\log |V|} \sum_{v \in V} p_t^{(k)}(v) \log p_t^{(k)}(v)$$
+
+* **Regra de Decisão (O Portão):**
+  * **Se $\mathcal{S}_t \le \tau_{\text{stress}}$ (Baixo Estresse / Reflexo Consolidado):**  
+    O modelo aceita imediatamente a previsão da camada rasa $p_t^{(k)}$ (ou pula os blocos pesados das camadas $k+1 \dots L$). **Economia computacional máxima!**
+  * **Se $\mathcal{S}_t > \tau_{\text{stress}}$ (Alto Estresse / Dúvida):**  
+    O sinal sobe pelo **Córtex Profundo** (camadas $k+1$ até $L$), produzindo o estado final verdadeiro $\mathbf{h}_t^{(L)}$ e a distribuição de elite $p_t^{(L)}$.
+
+> **Atualização (Experimento 0, 19/10/2026):** no Qwen2.5-0.5B, ler $\hat{\mathbf{h}}_t^{(k)}$ direto pela cabeça compartilhada (sem $P_k$) dá 0% de concordância com a camada final até a camada 16, e as camadas rasas ainda ficam confiantes e erradas. O projetor $P_k$ (*tuned lens*, treinado uma vez e congelado) passa a ser **obrigatório**: $p_t^{(k)} = \operatorname{Softmax}(\mathbf{W}_{\text{head}} \cdot \operatorname{Norm}(P_k(\hat{\mathbf{h}}_t^{(k)})))$, e o k e a calibração do estresse serão definidos pelo Experimento 0b. Detalhes em [resultados-exp0.md](resultados-exp0.md).
+>
+> **Experimento 0b (20/10/2026):** com $P_k$, a concordância passa de 50% a partir da camada 17 de 24 (k inicial = 17), mas a entropia com τ = 0,3 ainda não é confiável: os tokens confiantes da camada 17 acertam só 59–79%. O portão precisa de calibração por camada.
+
+---
+
+### Peça 3: Mielinização — Aprendizado Instantâneo pelo Resíduo ($L \rightarrow k$)
+Sempre que o estresse foi alto ($\mathcal{S}_t > \tau_{\text{stress}}$) e a Camada Profunda $L$ precisou trabalhar, nós não desperdiçamos esse esforço! Usamos a resposta da Camada $L$ como gabarito instantâneo para atualizar a Sinapse Rápida $(\mathbf{A}_k, \mathbf{B}_k)$ lá na Camada $k$:
+
+1. **Cálculo do Resíduo Interno (No Espaço de Estados ou Logits):**
+   $$\mathbf{r}_t = \operatorname{Norm}\left(\mathbf{h}_t^{(L)}\right) - \operatorname{Norm}\left(\hat{\mathbf{h}}_t^{(k)}\right) \quad \text{ou} \quad \mathcal{L}_{\text{distill}} = D_{\text{KL}}\left(p_t^{(L)} \parallel p_t^{(k)}\right)$$
+2. **Regra de Atualização Sináptica Local (Sem Backprop pelas 32 Camadas!):**
+   Com um custo de apenas uma multiplicação de vetores (fração de milissegundo), aplicamos a atualização com **Homeostase (Decaimento Elástico $\gamma \in [0.98, 0.999]$)**:
+   $$\mathbf{B}_k \leftarrow \gamma \mathbf{B}_k + \eta \cdot \mathbf{r}_t \left(\mathbf{A}_k^\top \mathbf{h}_t^{(k-1)}\right)^\top$$
+   *(Repare na elegância dessa equação: é uma regra de aprendizado **Hebbiana modulada por erro / Delta Rule** pura! Não precisa nem chamar o autograd pesado do PyTorch se usarmos o resíduo direto $\mathbf{r}_t$!)*
+
+---
+
+## 2. As 3 Hipóteses Científicas que Vamos Filtrar e Testar no Código
+
+1. **Hipótese H1 (Eficiência Progressiva — "A Curva da Mielina"):**  
+   À medida que o modelo processa um documento técnico, repositório de código ou sessão de resolução de problemas, a taxa de acionamento das camadas profundas cai de $>80\%$ nos primeiros parágrafos para $<35\%$ nos parágrafos seguintes, reduzindo os FLOPs totais em mais de $2\times$.
+2. **Hipótese H2 (Superioridade sobre Early-Exit Estático):**  
+   Com o mesmo orçamento médio de camadas (ex.: média de 10 camadas por token), o **MYELIN** (com sinapse rápida viva $\Delta W_k$) atinge perplexidade significativamente menor e acurácia maior do que o *Early-Exit Estático* ($\Delta W_k = 0$), porque aprende os padrões específicos do contexto atual.
+3. **Hipótese H3 (Estabilidade Homeostática):**  
+   O fator de elasticidade $\gamma < 1$ impede que a sinapse rápida sature quando o assunto muda no meio da conversa, permitindo adaptação contínua sem esquecimento catastrófico.
+
+---
+
+## 3. Estrutura do Repositório para Iniciar a Implementação
+
+```text
+MYELIN/
+├── README.md                                          # Visão geral e posicionamento
+├── docs/
+│   ├── guia-de-estudo-e-pitch.md                      # Guia para estudo e entrevistas
+│   └── especificacao-matematica-e-experimento.md      # Este documento
+├── src/
+│   └── myelin/
+│       ├── __init__.py
+│       ├── fast_synapse.py     # Camada FastSynapse (Regra Delta/Hebbiana rápida sobre o resíduo r_t)
+│       ├── stress_gate.py      # Cálculo de Estresse (Entropia / Margem) e roteamento Camada k vs L
+│       └── wrapper.py          # Acoplador para modelos HuggingFace (Qwen / Llama)
+├── notebooks/
+│   └── experimento_curva_mielina.ipynb                # Notebook pronto para gerar o gráfico decisivo
+└── tests/
+    └── test_fast_synapse.py                           # Teste matemático local em CPU (2 segundos)
+```
+
+---
+
+## 4. Trabalhos Futuros: Uma Segunda Memória, Lenta (Fora do Escopo da Fase 1)
+
+**Limitação observada na Fase 1 (LLM de brinquedo, $r = 16$, média de 10 sementes):** a Sinapse Rápida é uma memória de trabalho de tamanho fixo. Com mais padrões ativos do que o posto $r$ comporta, os antigos são sobrescritos, e ao voltar a um assunto esquecido a camada rasa **reaprende do zero, na mesma velocidade**: 63 chamadas ao córtex na 1ª vez contra 65 na volta, após 9 outros assuntos (62 com a sinapse zerada). Não há "economia de reaprendizado" (*savings*).
+
+**Ideia (inspirada nos *Complementary Learning Systems*, McClelland et al., 1995: hipocampo rápido + neocórtex lento):** somar à camada rasa uma segunda sinapse lenta $\Delta W_k^{\text{slow}} = \mathbf{B}_k^{\text{slow}} \mathbf{A}_k^\top$, com decaimento quase nulo ($\gamma_{\text{slow}} \approx 0.9999$), alimentada **apenas pelo que se repete**:
+
+$$\hat{\mathbf{h}}_t^{(k)} = f_k\left(\mathbf{h}_t^{(k-1)}\right) + \left(\mathbf{B}_k^{\text{slow}} + \mathbf{B}_k\right)\mathbf{A}_k^\top \mathbf{h}_t^{(k-1)}, \qquad \mathbf{B}_k^{\text{slow}} \leftarrow \gamma_{\text{slow}} \mathbf{B}_k^{\text{slow}} + \varepsilon \, \mathbf{B}_k \quad (\varepsilon \ll \eta)$$
+
+A transferência pode ser contínua (passo $\varepsilon$ a cada consolidação) ou periódica, como uma fase de "sono".
+
+**Métrica:** *savings* = chamadas ao córtex na volta a um assunto ÷ chamadas na 1ª vez. Hoje ≈ 1.0, e o objetivo é bem abaixo de 1.
+
+**Riscos a resolver antes:**
+- A sinapse lenta também tem posto finito e precisa de um critério do que merece ser guardado.
+- Uma consolidação errada fica gravada por muito tempo. O portão de estresse continua sendo a rede de segurança.
+- Se a memória lenta persistir entre sessões, ela vira memória **por usuário**, com implicações de privacidade e isolamento entre conversas.
+
+**Prioridade:** só depois de H1 e H2 estarem confirmadas num modelo real (Qwen/Llama).

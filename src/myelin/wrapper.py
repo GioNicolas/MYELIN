@@ -37,6 +37,7 @@ import torch
 import torch.nn.functional as F
 
 from myelin.lens import TunedLens
+from myelin.neural_cache import NeuralCache
 from myelin.stress_gate import StressGate
 
 Readout = Callable[[torch.Tensor], torch.Tensor]
@@ -301,6 +302,7 @@ def simulate(
     decay_per_token: bool = False,
     target_scale: str = "shallow",
     max_correction: float | None = None,
+    cache: NeuralCache | None = None,
 ) -> SimulationLog:
     """Percorre o texto token a token, na ordem, como o MYELIN faria ao vivo.
 
@@ -322,6 +324,8 @@ def simulate(
             na rodada 1 do Experimento 1).
         max_correction: se dado, limita ||B z|| a esse múltiplo de ||s_t||
             (região de confiança: a sinapse não pode esmagar a tradução).
+        cache: cache neural misturado na previsão rasa (ver `NeuralCache`).
+            Guarda o próximo token real de TODO token, depois de lê-lo.
     """
     if target_scale not in ("shallow", "q"):
         raise ValueError(f"target_scale deve ser 'shallow' ou 'q', recebido {target_scale!r}")
@@ -334,7 +338,10 @@ def simulate(
     # Com calendário fixo, o trecho vai até o próximo token do córtex, inclusive:
     # ele é lido antes de ensinar, como os outros.
     # Sem aprender (o estático), a memória nunca muda: lotes de 128 tokens.
-    if teacher_every and not decay_per_token:
+    # O cache neural muda a cada token: trechos de 1.
+    if cache is not None:
+        starts = list(range(T + 1))
+    elif teacher_every and not decay_per_token:
         starts = [0, *range(1, T, teacher_every), T]
     elif not learn and not decay_per_token:
         starts = [*range(0, T, 128), T]
@@ -358,6 +365,8 @@ def simulate(
             correction = correction * (limit / correction.norm(dim=-1, keepdim=True).clamp_min(1e-12)).clamp(max=1.0)
         q = shallow + correction
         logits = readout(q).float()
+        if cache is not None:
+            logits = cache.mix(key, logits)  # log-probabilidades: o portão e o top-1 não mudam de forma
         stress, gate_wake = (x.cpu() for x in gate(logits))
         positions = torch.arange(a, b)
         wake = positions % teacher_every == 0 if teacher_every else gate_wake | audit[a:b]
@@ -376,6 +385,8 @@ def simulate(
         log["agree"][a:b] = shallow_agree | wake
         shallow_nll_log[a:b] = shallow_nll
         nll_log[a:b] = torch.where(exit, shallow_nll, states.final_nll[a:b].cpu())
+        if cache is not None:
+            cache.add(key, states.next_ids[a:b])
 
         if learn:
             for j in wake.nonzero().flatten().tolist():  # só o último do trecho pode acordar

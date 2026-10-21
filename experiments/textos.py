@@ -11,6 +11,11 @@ calibrar as chaves:
   - código-en  : torch/nn/modules/activation.py (comentários em inglês);
   - prosa-en   : 2 artigos do split de TESTE do WikiText-2 (o tradutor viu o de treino).
 
+Domínio (Experimento 4): 15 trechos mais longos em data/eval_dominio/, 3 por
+grupo; fontes e licenças em data/eval_dominio/FONTES.md. Três grupos fora do
+treino do tradutor (português, outros idiomas, código não-Python) e dois de
+controle, do mesmo tipo do treino (Python, prosa em inglês).
+
 Calibração (mesma distribuição do treino do tradutor): arquivos Python da
 biblioteca transformers e artigos do split de treino do WikiText-2.
 """
@@ -56,12 +61,41 @@ EVAL_FILES = [
 ]
 
 
+DOMAIN_DIR = ROOT / "data" / "eval_dominio"
+DOMAIN_FILES = [
+    ("pt", "Dom Casmurro", "pt_dom_casmurro.txt"),
+    ("pt", "Braz Cubas", "pt_braz_cubas.txt"),
+    ("pt", "especificação (MYELIN)", "pt_especificacao.md"),
+    ("idiomas", "Quijote (es)", "es_quijote.txt"),
+    ("idiomas", "Verwandlung (de)", "de_verwandlung.txt"),
+    ("idiomas", "Tour du monde (fr)", "fr_tour_du_monde.txt"),
+    ("código-outro", "option.rs", "option.rs"),
+    ("código-outro", "strings.go", "strings.go"),
+    ("código-outro", "response.js", "response.js"),
+    ("python", "numpy numeric.py", "numpy_numeric.py"),
+    ("python", "jinja2 lexer.py", "jinja2_lexer.py"),
+    ("python", "networkx weighted.py", "networkx_weighted.py"),
+    ("prosa-en", "wikitext: Du Fu", "wikitext_du_fu.txt"),
+    ("prosa-en", "wikitext: Kiss You", "wikitext_kiss_you.txt"),
+    ("prosa-en", "wikitext: Ise battleship", "wikitext_ise_battleship.txt"),
+]
+
+
+def _frozen(tokenizer, directory: Path, files: list[tuple[str, str, str]], max_tokens: int) -> list[dict]:
+    return [
+        {"name": name, "group": group, "ids": _ids(tokenizer, (directory / file).read_text(encoding="utf-8"), max_tokens)}
+        for group, name, file in files
+    ]
+
+
 def eval_texts(tokenizer, max_tokens: int = 1024) -> list[dict]:
     """Lista de {"name", "group", "ids"} a partir das cópias congeladas em data/eval/."""
-    return [
-        {"name": name, "group": group, "ids": _ids(tokenizer, (EVAL_DIR / file).read_text(encoding="utf-8"), max_tokens)}
-        for group, name, file in EVAL_FILES
-    ]
+    return _frozen(tokenizer, EVAL_DIR, EVAL_FILES, max_tokens)
+
+
+def domain_texts(tokenizer, max_tokens: int = 2048) -> list[dict]:
+    """Os 15 textos do Experimento 4, de data/eval_dominio/."""
+    return _frozen(tokenizer, DOMAIN_DIR, DOMAIN_FILES, max_tokens)
 
 
 def calibration_ids(tokenizer, n_code: int = 4, n_prose: int = 4, max_tokens: int = 512, seed: int = 1):

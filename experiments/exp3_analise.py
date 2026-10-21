@@ -1,59 +1,81 @@
-"""Experimento 3, análise: ganho da memória contra o estático na MESMA taxa de saída, por texto e por grupo.
+"""Análise dos Experimentos 3 e 4: ganho de cada configuração contra o estático na MESMA taxa de saída.
 
-Para cada texto, a curva do estático (taxa de saída → ΔNLL, 5 valores de τ) é
-interpolada linearmente na taxa de saída de cada ponto da memória; pontos fora
-da faixa do estático ficam de fora (sem extrapolação).
+Para cada texto, a curva do estático (taxa de saída → ΔNLL, um ponto por τ) é
+interpolada linearmente na taxa de saída de cada ponto da configuração; pontos
+fora da faixa do estático ficam de fora (sem extrapolação). Comparar pelo mesmo
+τ engana: com memória, mais tokens saem cedo no mesmo τ.
 
     python experiments/exp3_analise.py results/exp3_Qwen2.5-0.5B_k17.json
 """
 
-import json, sys
-from collections import defaultdict
-import numpy as np
-sys.stdout.reconfigure(encoding="utf-8")
-r = json.load(open(sys.argv[1], encoding="utf-8"))
-taus = [str(t) for t in r["config"]["taus"]]
-texts = r["texts"]
-names = list(next(iter(texts.values()))["runs"])
-mem = [n for n in names if n != "estático"]
+from __future__ import annotations
 
-def interp(x, xs, ys):
-    if x < xs[0] - 1e-9 or x > xs[-1] + 1e-9: return float("nan")
+import json
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+import numpy as np
+
+
+def _interp(x: float, xs: list[float], ys: list[float]) -> float:
+    if x < xs[0] - 1e-9 or x > xs[-1] + 1e-9:
+        return float("nan")
     return float(np.interp(x, xs, ys))
 
-# 1) por texto: ganho na mesma taxa de saída (média dos τ dentro da faixa)
-print("ΔNLL(memória) − ΔNLL(estático) na mesma taxa de saída, média dos τ dentro da faixa do estático")
-print(f"{'texto':<38} {'grupo':<11} " + " ".join(f"{n[:22]:>23}" for n in mem))
-per_group = defaultdict(lambda: defaultdict(list))
-for tname, t in texts.items():
-    st = t["runs"]["estático"]
-    xs = [st[x]["exit_rate"] for x in taus]; ys = [st[x]["delta_nll"] for x in taus]
-    row = []
-    for n in mem:
-        gaps = [m["delta_nll"] - interp(m["exit_rate"], xs, ys) for m in t["runs"][n].values()]
-        gaps = [g for g in gaps if g == g]
-        g = np.mean(gaps) if gaps else float("nan")
-        row.append(f"{g:+.3f} ({len(gaps)})"); per_group[t["group"]][n].append(g)
-    print(f"{tname[-38:]:<38} {t['group']:<11} " + " ".join(f"{c:>23}" for c in row))
-print("\nPor grupo:")
-for g, d in per_group.items():
-    print(f"  {g:<11} " + " ".join(f"{np.nanmean(d[n]):>+23.3f}" for n in mem))
 
-# 2) por grupo e τ: tabela de pontos
-print("\nPontos por grupo (média dos textos do grupo): saída% / ΔNLL / custo real")
-groups = sorted({t["group"] for t in texts.values()})
-for g in groups:
-    ts = [t for t in texts.values() if t["group"] == g]
-    print(f"\n[{g}] ({len(ts)} textos) NLL completo = {np.mean([t['full_nll'] for t in ts]):.3f}")
-    for n in names:
+def gains_at_equal_exit(text: dict, taus: list[str], name: str) -> list[float]:
+    """ΔNLL(config) − ΔNLL(estático interpolado), um valor por τ dentro da faixa do estático."""
+    static = text["runs"]["estático"]
+    xs = [static[t]["exit_rate"] for t in taus]
+    ys = [static[t]["delta_nll"] for t in taus]
+    gaps = [m["delta_nll"] - _interp(m["exit_rate"], xs, ys) for m in text["runs"][name].values()]
+    return [g for g in gaps if g == g]
+
+
+def analyze(results: dict) -> None:
+    taus = [str(t) for t in results["config"]["taus"]]
+    texts = results["texts"]
+    names = list(next(iter(texts.values()))["runs"])
+    others = [n for n in names if n != "estático"]
+    groups = list(dict.fromkeys(t["group"] for t in texts.values()))
+
+    print("\nΔNLL(config) − ΔNLL(estático) na mesma taxa de saída (média dos τ dentro da faixa; negativo = melhor)")
+    print(f"{'texto':<30} {'grupo':<13} " + " ".join(f"{n[:24]:>24}" for n in others))
+    per_group = defaultdict(lambda: defaultdict(list))
+    for text_name, text in texts.items():
         cells = []
-        for x in taus:
-            e = np.mean([t["runs"][n][x]["exit_rate"] for t in ts]); d = np.mean([t["runs"][n][x]["delta_nll"] for t in ts])
-            cells.append(f"{e:4.0%} {d:+.2f}")
-        print(f"  {n:<30} " + " | ".join(cells))
+        for name in others:
+            gaps = gains_at_equal_exit(text, taus, name)
+            gain = float(np.mean(gaps)) if gaps else float("nan")
+            per_group[text["group"]][name].append(gain)
+            cells.append(f"{gain:+.3f} ({len(gaps)})")
+        print(f"{text_name[-30:]:<30} {text['group']:<13} " + " ".join(f"{c:>24}" for c in cells))
+    print("\nPor grupo:")
+    for group in groups:
+        print(f"  {group:<41} " + " ".join(f"{np.nanmean(per_group[group][n]):>+24.3f}" for n in others))
 
-# 3) mielinização: saída 2ª metade vs total
-print("\nTaxa de saída: total → 2ª metade (média dos 7 textos), τ=0.3")
-for n in names:
-    e = np.mean([t["runs"][n]["0.3"]["exit_rate"] for t in texts.values()]); e2 = np.mean([t["runs"][n]["0.3"]["exit_rate_2nd"] for t in texts.values()])
-    print(f"  {n:<30} {e:.0%} → {e2:.0%}")
+    print("\nPontos por grupo (média dos textos do grupo): saída / ΔNLL, um por τ")
+    for group in groups:
+        group_texts = [t for t in texts.values() if t["group"] == group]
+        full = np.mean([t["full_nll"] for t in group_texts])
+        print(f"\n[{group}] ({len(group_texts)} textos) NLL do modelo completo = {full:.3f}")
+        for name in names:
+            cells = []
+            for tau in taus:
+                exit_rate = np.mean([t["runs"][name][tau]["exit_rate"] for t in group_texts])
+                delta = np.mean([t["runs"][name][tau]["delta_nll"] for t in group_texts])
+                cells.append(f"{exit_rate:4.0%} {delta:+.2f}")
+            print(f"  {name:<30} " + " | ".join(cells))
+
+    tau = taus[len(taus) // 2]
+    print(f"\nTaxa de saída com τ = {tau}: total → 2ª metade (média dos {len(texts)} textos)")
+    for name in names:
+        total = np.mean([t["runs"][name][tau]["exit_rate"] for t in texts.values()])
+        second = np.mean([t["runs"][name][tau]["exit_rate_2nd"] for t in texts.values()])
+        print(f"  {name:<30} {total:.0%} → {second:.0%}")
+
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")
+    analyze(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")))

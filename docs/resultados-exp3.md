@@ -95,3 +95,11 @@ Taxa de saída com τ = 0,3, total → 2ª metade:
 1. **Modelo maior.** Num modelo de 7B, a cabeça vale ~3 de 28 camadas, e a economia de sair cedo passa a existir. O que precisa ser medido: se o tradutor e o ganho relativo se mantêm.
 2. **Rascunho de decodificação especulativa.** A camada rasa propõe tokens e o modelo completo verifica. O professor fica quase contínuo, como na rodada 2b. A métrica passa a ser a taxa de aceitação; o Experimento 2b mediu +3 a +6 pontos de concordância com o kNN. Trabalhos a comparar: Online Speculative Decoding, Kangaroo, Draft & Verify, LayerSkip.
 3. **Assumir o enquadramento de adaptação ao domínio** e medir onde ele brilha: textos longos em idioma ou domínio fora do treino do tradutor, contra baselines como o *neural cache* e a *dynamic evaluation*.
+
+## Próximos: Experimentos 4 e 5 (rumos 1 e 3)
+
+- **Experimento 4, adaptação ao domínio** ([`experiments/exp4_dominio.py`](../experiments/exp4_dominio.py) · [`notebooks/exp4_dominio.ipynb`](../notebooks/exp4_dominio.ipynb)):
+  - 15 textos de 2048 tokens em `data/eval_dominio/`, 3 por grupo: português, outros idiomas, código não-Python, e os controles Python e prosa em inglês;
+  - duas linhas de base novas: o viés lento sozinho e o cache neural (Grave et al., 2017), uma memória de tokens que não precisa do córtex;
+  - evolução por quarto do texto.
+- **Experimento 5, modelo maior** ([`notebooks/exp5_modelo_maior.ipynb`](../notebooks/exp5_modelo_maior.ipynb)): Qwen2.5-1.5B, com a cabeça custando ~5 de 28 camadas. Treina o tradutor, mede a concordância por camada e roda as curvas do Experimento 3 com k = 20 e k = 16.
