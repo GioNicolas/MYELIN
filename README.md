@@ -15,6 +15,7 @@
 - 🔬 **[Resultados do Experimento 0](docs/resultados-exp0.md):** no Qwen2.5-0.5B real, as camadas rasas lidas direto pela cabeça final concordam 0% com a camada final e ficam confiantes e erradas, o que torna obrigatório o tradutor $P_k$ (*tuned lens*). Com ele, a camada 17 de 24 já concorda em 39–61%, mas o portão de estresse ainda precisa de calibração.
 - 🧪 **[Resultados do Experimento 1](docs/resultados-exp1.md):** a primeira Curva de Mielinização no Qwen real. A sinapse ajuda no texto em português, mas colapsa no código quando as chaves ficam quase paralelas; a correção está em teste.
 - 🧭 **[Resultados do Experimento 2](docs/resultados-exp2.md):** com o córtex num calendário fixo, uma memória exata (kNN) melhora a camada rasa em 7 de 7 textos, mas pouco (fecha 7–19% da distância até o modelo completo); a memória linear com chaves descorrelacionadas atrapalha; o colapso vinha do portão, não das chaves.
+- ⚖️ **[Resultados do Experimento 3](docs/resultados-exp3.md):** com o portão de volta, a memória melhora a curva custo × qualidade (6 a 13 pontos a mais de saídas com a mesma qualidade), mas o ganho vem do português e do código repetitivo do projeto, quase zero em inglês. No 0,5B nenhum ponto de operação fica mais barato que o modelo completo, porque a cabeça custa ~9 camadas.
 
 ---
 

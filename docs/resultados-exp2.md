@@ -122,6 +122,8 @@ Concordância da camada rasa com a final, média dos blocos 5–8 (estático →
 
 ## Próximo: Experimento 3 (o H2 com o portão)
 
+Resultados: [resultados-exp3.md](resultados-exp3.md).
+
 [`experiments/exp3_portao.py`](../experiments/exp3_portao.py) · [`notebooks/exp3_portao.ipynb`](../notebooks/exp3_portao.ipynb)
 
 **Desenho:**
