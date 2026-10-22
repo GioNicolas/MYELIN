@@ -25,7 +25,7 @@
 >   - "saída idêntica": é uma propriedade do algoritmo de verificação, que este experimento não implementou.
 > - **Novidade:** online speculative decoding (Liu et al., 2024) e DVI (Bhansali e Heck, 2025, arXiv:2510.05421) já usam o verificador para ensinar o rascunhador online, com gradiente. O diferencial do MYELIN é fazer isso **sem retropropagação**, com uma memória não paramétrica de tamanho fixo.
 >
-> O plano de correção e o próximo experimento estão em [resultados-exp7.md](resultados-exp7.md) (a fazer).
+> O experimento corrigido, com o ciclo real, as linhas de base justas e os controles, está em [resultados-exp7.md](resultados-exp7.md).
 
 **Data:** 22 de outubro de 2026  
 **Modelo:** `Qwen/Qwen2.5-0.5B` (24 camadas, cabeça ≈ 9,1 camadas), pesos congelados, GPU T4 do Kaggle (~29 min)  
