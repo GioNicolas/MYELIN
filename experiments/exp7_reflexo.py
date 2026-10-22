@@ -39,12 +39,12 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from myelin import KNNCache, NeuralCache, TunedLens, capture  # noqa: E402
 from myelin.controls import LastCorrection, MeanCorrection, ShuffledKNN  # noqa: E402
-from myelin.speculative import ChainDrafter, HeadDrafter, PromptLookupDrafter, ReflexDrafter, run_cycles  # noqa: E402
+from myelin.speculative import ChainDrafter, FixedGamma, HeadDrafter, PromptLookupDrafter, ReflexDrafter, run_cycles  # noqa: E402
 from myelin.wrapper import fit_key_stats, hf_readout, make_keys  # noqa: E402
 from exp3_portao import head_cost_in_layers  # noqa: E402
 from textos import calibration_ids, domain_texts, eval_texts  # noqa: E402
 
-def grid(head_ks: list[int], reflex_layers: list[int]) -> dict[str, list[dict]]:
+def grid(head_ks: list[int], reflex_layers: list[int], reflex_matches: tuple[int, ...] = (1,)) -> dict[str, list[dict]]:
     """Famílias de rascunhadores e os hiperparâmetros que a validação escolhe."""
     families: dict[str, list[dict]] = {}
     for k in head_ks:
@@ -57,8 +57,8 @@ def grid(head_ks: list[int], reflex_layers: list[int]) -> dict[str, list[dict]]:
         ]
     families["busca de n-gramas (PLD)"] = [{"kind": "pld", "n_max": n, "gamma": g} for n in (2, 3, 4) for g in (3, 6)]
     families["reflexo MYELIN"] = [
-        {"kind": "reflex", "layer": layer, "tau": tau, "gamma": g}
-        for layer, tau, g in itertools.product(reflex_layers, (0.6, 0.75, 0.9), (3, 6))
+        {"kind": "reflex", "layer": layer, "tau": tau, "gamma": g, "min_match": m}
+        for layer, tau, g, m in itertools.product(reflex_layers, (0.6, 0.75, 0.9), (3, 6), reflex_matches)
     ]
     return families
 
@@ -82,9 +82,17 @@ def build(cfg: dict, bundle: dict, readout, head: float):
     if kind == "pld":
         return PromptLookupDrafter(bundle["tokens"], n_max=cfg["n_max"])
     if kind == "reflex":
-        return ReflexDrafter(bundle["keys"][cfg["layer"]], bundle["tokens"], tau=cfg["tau"])
+        return ReflexDrafter(
+            bundle["keys"][cfg["layer"]],
+            bundle["tokens"],
+            tau=cfg["tau"],
+            min_match=cfg.get("min_match", 1),
+            candidate_cost=bundle.get("candidate_cost", 0.0),
+        )
     if kind == "chain":
-        return ChainDrafter(build(cfg["first"], bundle, readout, head), build(cfg["second"], bundle, readout, head))
+        # Cada elo usa o seu próprio γ (a cabeça com γ = 1 não deve rascunhar 6 tokens só porque o reflexo usa 6).
+        first, second = (FixedGamma(build(c, bundle, readout, head), c["gamma"]) for c in (cfg["first"], cfg["second"]))
+        return ChainDrafter(first, second)
     raise ValueError(kind)
 
 
@@ -94,17 +102,30 @@ def run(cfg: dict, bundle: dict, readout, head: float, full_cost: float, extra: 
     return stats.as_dict()
 
 
-@torch.no_grad()
 def make_bundle(model, tokenizer, lens, text: dict, stats: dict, args) -> dict:
-    """Gera a continuação gulosa e guarda o que os rascunhadores precisam."""
-    prompt = text["ids"][:, : args.prompt_tokens].to(args.device)
+    """Continua os primeiros `prompt_tokens` do documento."""
+    return generate_bundle(model, tokenizer, lens, text["ids"][:, : args.prompt_tokens], text["name"], text["group"], stats, args)
+
+
+def chain(*links: dict) -> dict:
+    """Corrente de rascunhadores: cada um só fala quando os anteriores se calam."""
+    cfg = links[-1]
+    for link in reversed(links[:-1]):
+        cfg = {"kind": "chain", "first": link, "second": cfg, "gamma": max(link["gamma"], cfg["gamma"])}
+    return cfg
+
+
+@torch.no_grad()
+def generate_bundle(model, tokenizer, lens, prompt: torch.Tensor, name: str, group: str, stats: dict, args) -> dict:
+    """Gera a continuação gulosa do prompt e guarda o que os rascunhadores precisam."""
+    prompt = prompt.to(args.device)
     sequence = model.generate(
         prompt,
         attention_mask=torch.ones_like(prompt),
         do_sample=False,
         max_new_tokens=args.new_tokens,
         repetition_penalty=1.0,
-        pad_token_id=tokenizer.eos_token_id,
+        pad_token_id=tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id,
     )
     hidden = model(sequence, output_hidden_states=True)
     final_top = hidden.logits[0].argmax(-1)
@@ -125,9 +146,10 @@ def make_bundle(model, tokenizer, lens, text: dict, stats: dict, args) -> dict:
             repeats += 1
         seen.add(gram)
     mismatch = sum(final_top[p].item() != tokens[p + 1] for p in range(start, end)) / max(1, end - start)
+    layer_params = sum(p.numel() for p in model.model.layers[0].parameters())
     return {
-        "name": text["name"],
-        "group": text["group"],
+        "name": name,
+        "group": group,
         "tokens": tokens,
         "final_top": final_top.tolist(),
         "start": start,
@@ -137,6 +159,7 @@ def make_bundle(model, tokenizer, lens, text: dict, stats: dict, args) -> dict:
         "repeat_4gram": repeats / max(1, len(generated)),
         "greedy_mismatch": mismatch,
         "preview": tokenizer.decode(generated[:60]),
+        "candidate_cost": model.config.hidden_size / layer_params,  # camadas por candidato do reflexo
     }
 
 
@@ -180,7 +203,7 @@ def main() -> None:
     del validation
 
     pld, reflex = chosen["busca de n-gramas (PLD)"], chosen["reflexo MYELIN"]
-    chosen["PLD → reflexo"] = {"kind": "chain", "first": pld, "second": reflex, "gamma": max(pld["gamma"], reflex["gamma"])}
+    chosen["PLD → reflexo"] = chain(pld, reflex)
     best_knn = max((f for f in chosen if f.startswith("kNN")), key=lambda f: val_scores[f])
     controls = {
         f"controle: {name} ({best_knn.split()[-1]})": {**chosen[best_knn], "memory": memory}
@@ -220,11 +243,12 @@ def print_summary(results: dict) -> None:
         chosen = [t for t in texts if group is None or t["group"] == group]
         return float(np.mean([t["runs"][name][metric] for t in chosen]))
 
+    w = max(12, *(len(g) for g in groups))
     print("\nSpeedup sobre a decodificação normal (média dos textos; > 1 = mais rápido), texto gerado pelo modelo")
-    print(f"{'rascunhador':<34} " + " ".join(f"{g:>12}" for g in groups) + f" {'todos':>7} {'aceit.':>7} {'tok/ciclo':>9} {'propõe':>7}")
+    print(f"{'rascunhador':<34} " + " ".join(f"{g:>{w}}" for g in groups) + f" {'todos':>7} {'aceit.':>7} {'tok/ciclo':>9} {'propõe':>7}")
     for name in names:
         print(
-            f"{name:<34} " + " ".join(f"{mean(name, 'speedup', g):>11.2f}×" for g in groups)
+            f"{name:<34} " + " ".join(f"{mean(name, 'speedup', g):>{w - 1}.2f}×" for g in groups)
             + f" {mean(name, 'speedup'):>6.2f}× {mean(name, 'acceptance'):>7.0%}"
             + f" {mean(name, 'tokens_per_cycle'):>9.2f} {mean(name, 'proposal_rate'):>7.0%}"
         )

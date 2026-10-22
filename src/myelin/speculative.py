@@ -268,12 +268,25 @@ class ReflexDrafter:
     então de graça). Procura, entre as últimas `capacity` posições i, a mais
     parecida (cos >= tau) cujo token seguinte é o que acabou de ser emitido
     (tokens[i+1] == tokens[c]) e propõe a continuação tokens[i+2..]. Sem
-    vizinho familiar, não especula: nenhum custo a mais.
+    vizinho familiar, não especula.
+
+    min_match = 2 exige também tokens[i] == tokens[c-1]. A busca custa
+    `candidate_cost` camadas por candidato (um produto escalar de d números,
+    contra um número por parâmetro de uma camada, por token).
     """
 
-    def __init__(self, keys: torch.Tensor, tokens: list[int], tau: float = 0.8, capacity: int = 1024) -> None:
+    def __init__(
+        self,
+        keys: torch.Tensor,
+        tokens: list[int],
+        tau: float = 0.8,
+        capacity: int = 1024,
+        min_match: int = 1,
+        candidate_cost: float = 0.0,
+    ) -> None:
         self.keys = F.normalize(keys.float(), dim=-1)
         self.tokens, self.tau, self.capacity = tokens, tau, capacity
+        self.min_match, self.candidate_cost = min_match, candidate_cost
         self.ids = torch.tensor(tokens, device=keys.device)
 
     @torch.no_grad()
@@ -281,14 +294,17 @@ class ReflexDrafter:
         if c < 2:
             return [], 0.0
         lo = max(0, c - 1 - self.capacity)
+        cost = (c - 1 - lo) * self.candidate_cost
         sims = self.keys[lo : c - 1] @ self.keys[c - 1]  # candidatos i = lo..c-2
         consistent = self.ids[lo + 1 : c] == self.tokens[c]
+        if self.min_match >= 2:
+            consistent &= self.ids[lo:c - 1] == self.tokens[c - 1]
         sims = torch.where(consistent & (sims >= self.tau), sims, torch.full_like(sims, -2.0))
         best = int(sims.argmax())
         if sims[best] < -1.0:
-            return [], 0.0
+            return [], cost
         i = lo + best
-        return self.tokens[i + 2 : min(i + 2 + gamma, c + 1)], 0.0
+        return self.tokens[i + 2 : min(i + 2 + gamma, c + 1)], cost
 
     def observe(self, positions: range) -> None:
         pass
@@ -310,3 +326,16 @@ class ChainDrafter:
     def observe(self, positions: range) -> None:
         self.first.observe(positions)
         self.second.observe(positions)
+
+
+class FixedGamma:
+    """Fixa o γ de um rascunhador, para que cada um numa corrente use o seu."""
+
+    def __init__(self, drafter: Drafter, gamma: int) -> None:
+        self.drafter, self.gamma = drafter, gamma
+
+    def propose(self, c: int, gamma: int) -> tuple[list[int], float]:
+        return self.drafter.propose(c, self.gamma)
+
+    def observe(self, positions: range) -> None:
+        self.drafter.observe(positions)

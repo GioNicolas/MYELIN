@@ -7,7 +7,7 @@ import torch
 
 from myelin import KNNCache, NeuralCache
 from myelin.controls import LastCorrection, MeanCorrection, ShuffledKNN
-from myelin.speculative import ChainDrafter, HeadDrafter, PromptLookupDrafter, ReflexDrafter, run_cycles
+from myelin.speculative import ChainDrafter, FixedGamma, HeadDrafter, PromptLookupDrafter, ReflexDrafter, run_cycles
 from test_wrapper import D, synthetic_text
 
 
@@ -102,3 +102,20 @@ def test_controles_da_memoria():
         shuffled(keys[i : i + 1])
         shuffled.consolidate(keys[i : i + 1], torch.full((1, D), value) - shuffled._applied)
     assert sorted(float(c[0]) for c in shuffled.corrections) == [1.0, 5.0, 9.0]
+
+
+def test_reflexo_com_dois_tokens_e_custo_da_busca():
+    # O token 9 aparece depois de 1 e depois de 2; só o par (2, 9) prevê o 7.
+    tokens = [1, 9, 5, 2, 9, 7, 3, 2, 9]
+    keys = torch.ones(len(tokens), D)  # todas as situações parecem iguais: só os tokens decidem
+    c = len(tokens) - 1
+    assert ReflexDrafter(keys, tokens, tau=0.5, min_match=1).propose(c, 1)[0] in ([5], [7])
+    drafts, cost = ReflexDrafter(keys, tokens, tau=0.5, min_match=2, candidate_cost=0.01).propose(c, 1)
+    assert drafts == [7] and cost == pytest.approx((c - 1) * 0.01)
+
+
+def test_cada_elo_da_corrente_usa_o_seu_gamma():
+    tokens = list(range(40))
+    oracle = Oracle(tokens[1:] + [0])
+    stats = run_cycles(ChainDrafter(Silent(), FixedGamma(oracle, 1)), tokens[1:] + [0], 0, 39, gamma=6, full_cost=1.0, extra_token_cost=0.0)
+    assert stats.speedup == pytest.approx(2.0, rel=0.05)  # 2 tokens por ciclo, não 7

@@ -9,6 +9,7 @@
 - **O ciclo:** o rascunhador propõe até γ tokens; o verificador aceita o maior prefixo igual ao seu top-1 e emite mais um token (a correção, ou o bônus). Só depois a memória aprende, com um ciclo de atraso.
 - **Custo do ciclo**, em passos do modelo completo: custo_rascunho/(L+H) + 1 + ε·(tokens rascunhados), com ε = 0,02 para todos. É a conta corrigida do Experimento 6: a verificação custa um passo inteiro.
 - **Hiperparâmetros escolhidos na validação** (7 textos de `data/eval/`), separadamente para cada família, e medidos no **teste** (15 textos de `data/eval_dominio/`, 3 por grupo).
+  - ⚠️ **Sobreposição encontrada depois:** o Du Fu do teste é um prefixo do Du Fu da validação, então os dois geraram a mesma continuação. Um dos 15 textos de teste também ajudou a escolher os hiperparâmetros. O efeito é pequeno (o reflexo ganha da busca de n-gramas por pouco nesse texto, 3,23× contra 3,13×), e o Experimento 7b tira o Du Fu da validação.
 
 **Rascunhadores:**
 - **cabeça na camada k** (k = 8 e 17), que paga γ·(k+H) camadas por ciclo:
