@@ -18,6 +18,7 @@
 - ⚖️ **[Resultados do Experimento 3](docs/resultados-exp3.md):** com o portão de volta, a memória melhora a curva custo × qualidade (6 a 13 pontos a mais de saídas com a mesma qualidade), mas o ganho vem do português e do código repetitivo do projeto, quase zero em inglês. No 0,5B nenhum ponto de operação fica mais barato que o modelo completo, porque a cabeça custa ~9 camadas.
 - 🌍 **[Resultados do Experimento 4](docs/resultados-exp4.md):** em 15 textos, o ganho segue a distância até o treino do tradutor: fora do domínio (idiomas, português, código não-Python), quase o dobro de saídas cedo com a mesma qualidade, ganhando do cache neural; em inglês, zero. Nos idiomas o ganho é sobretudo correção global; no código, memória do contexto.
 - 📏 **[Resultados do Experimento 5](docs/resultados-exp5.md):** no Qwen2.5-1.5B a cabeça pesa metade (5 de 28 camadas), mas o early exit num modelo congelado continua sem pagar a conta: a camada que concorda ~50% com a final fica a ~70% da profundidade em qualquer tamanho. O ganho da memória fora do domínio se repete (português −1,0 nat).
+- ⚗️ **[Resultados do Experimento 4b](docs/resultados-exp4b.md):** com um tradutor amplo (vários idiomas e linguagens), a maior parte do ganho fora do domínio some: era compensação do tradutor estreito. O que sobra é memória do contexto, −0,13 a −0,20 nats em código e textos fora do inglês, acima do cache neural. E adaptar durante a leitura recupera quase tudo o que o retreino offline do tradutor dá.
 
 ---
 
