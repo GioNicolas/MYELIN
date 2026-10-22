@@ -9,7 +9,7 @@ dá o professor em todo token).
 Mede, por texto e por grupo, com o tradutor amplo (Experimento 4b):
   - aceitação gulosa (top-1 igual) e na amostragem (Σ min(p_k, p_L));
   - speedup esperado pela fórmula padrão (ver myelin/speculative.py), com a
-    cabeça cobrada em todo rascunho e as camadas 1..k reaproveitadas na verificação;
+    cabeça cobrada em todo rascunho e a verificação custando um passo inteiro;
     também com a cabeça na proporção de um modelo de 7B (o Experimento 5 mostrou
     que a concordância depende da profundidade relativa, não do tamanho).
 
@@ -72,8 +72,8 @@ def print_summary(results: dict) -> None:
     for k in results["config"]["ks"]:
         key = str(k)
         names = list(texts[0]["runs"][key])
-        c_draft, c_verify = (k + head) / (n_layers + head), (n_layers - k + head) / (n_layers + head)
-        print(f"\n=== k = {k} de {n_layers}: rascunho custa {c_draft:.2f} e verificação {c_verify:.2f} de um passo do modelo completo ===")
+        c_draft = (k + head) / (n_layers + head)
+        print(f"\n=== k = {k} de {n_layers}: rascunho custa {c_draft:.2f} e verificação 1,00 de um passo do modelo completo ===")
 
         def mean(name: str, metric: str, group: str | None = None) -> float:
             chosen = [t for t in texts if group is None or t["group"] == group]

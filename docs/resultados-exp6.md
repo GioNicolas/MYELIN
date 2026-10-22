@@ -1,5 +1,32 @@
 # Resultados — Experimento 6: a camada rasa como rascunho de decodificação especulativa
 
+> ## ⚠️ Correção (revisão externa, 22/10/2026)
+>
+> A revisão por dois modelos externos (Codex e Antigravity) encontrou um **erro no modelo de custo**. As seções de speedup abaixo estão **erradas** e ficam só como registro.
+>
+> **O erro:** a fórmula cobrava a verificação como (L−k+H)/(L+H). Mas o último token rascunhado ainda precisa passar pelas camadas 1..k antes de as γ+1 posições passarem juntas pelas camadas de cima (o LayerSkip faz isso em `forward_remainder`). Então a verificação custa **um passo inteiro**: custo do ciclo = γ·(k+H)/(L+H) + 1. Com γ = 1, a conta errada dava custo independente de k.
+>
+> **Speedup guloso corrigido** (estático → kNN 1024; com a cabeça real | com a cabeça de 7B):
+>
+> | | todos | código não-Python | Python |
+> |---|---|---|---|
+> | k = 8 | 0,80× → 0,91× \| 0,88× → 0,99× | 0,83× → 1,00× \| 0,91× → 1,10× | 0,80× → 0,96× \| 0,87× → 1,05× |
+> | k = 17 | 0,82× → 0,87× \| 0,84× → 0,90× | 0,91× → 0,97× \| 0,94× → 1,01× | 0,89× → 0,96× \| 0,92× → 0,99× |
+>
+> - **Nenhuma configuração acelera no 0,5B.** Com γ = 1, empatar exige aceitação maior que o custo do rascunho: 52% em k = 8 e 79% em k = 17, com a cabeça real.
+> - **O que continua valendo:** o ganho de **concordância** do rascunho com o modelo completo (15/15 textos, 21,5% → 37,6% em k = 8), medido em teacher forcing.
+>
+> **Outros pontos aceitos da revisão:**
+> - A concordância média sobre todas as posições não é a aceitação por ciclo. Num decodificador real, as posições logo após um acerto são puladas (o token bônus). Falta uma simulação do ciclo, em texto gerado pelo próprio modelo.
+> - O cache neural foi uma linha de base injusta: aprendeu o token do texto, e não o do verificador; λ = 0,1 quase nunca consegue mudar o top-1; não tinha porta de familiaridade; capacidade 256 contra 1024. "Corrigir o estado oculto é o que faz a diferença" **não está demonstrado**.
+> - Faltam a linha de base de **busca de n-gramas no contexto** (Prompt Lookup Decoding, Cacheback), que propõe tokens sem rodar camada nenhuma, e controles da memória (resíduo médio, último resíduo, pares embaralhados).
+> - **Exageros de redação:**
+>   - "sem treinar nada": o tradutor $P_k$ é treinado uma vez, offline;
+>   - "saída idêntica": é uma propriedade do algoritmo de verificação, que este experimento não implementou.
+> - **Novidade:** online speculative decoding (Liu et al., 2024) e DVI (Bhansali e Heck, 2025, arXiv:2510.05421) já usam o verificador para ensinar o rascunhador online, com gradiente. O diferencial do MYELIN é fazer isso **sem retropropagação**, com uma memória não paramétrica de tamanho fixo.
+>
+> O plano de correção e o próximo experimento estão em [resultados-exp7.md](resultados-exp7.md) (a fazer).
+
 **Data:** 22 de outubro de 2026  
 **Modelo:** `Qwen/Qwen2.5-0.5B` (24 camadas, cabeça ≈ 9,1 camadas), pesos congelados, GPU T4 do Kaggle (~29 min)  
 **Configuração:**

@@ -40,11 +40,13 @@ def test_cache_neural_no_rascunho():
 
 
 def test_speedup_esperado():
-    # Sem aceitação, o melhor é γ = 1 e fica mais lento que o modelo completo.
+    # Sem aceitação, o melhor é γ = 1 e fica mais lento: 1 token por 0,5 + 1 passos.
     speedup, gamma = expected_speedup(0.0, k=12, n_layers=24, head=0.0)
-    assert gamma == 1 and speedup == pytest.approx(1.0)
-    # Aceitação total, cabeça grátis, k = L/2: γ = 8 dá 9 tokens por 8·0,5 + 0,5 = 4,5 passos.
+    assert gamma == 1 and speedup == pytest.approx(1 / 1.5)
+    # Aceitação total, cabeça grátis, k = L/2: γ = 8 dá 9 tokens por 8·0,5 + 1 = 5 passos.
     speedup, gamma = expected_speedup(1.0, k=12, n_layers=24, head=0.0)
-    assert gamma == 8 and speedup == pytest.approx(2.0)
+    assert gamma == 8 and speedup == pytest.approx(9 / 5)
+    # Com γ = 1, empata exatamente quando a aceitação iguala o custo do rascunho.
+    assert expected_speedup(0.5, k=12, n_layers=24, head=0.0)[0] == pytest.approx(1.0)
     # A cabeça cara piora o speedup.
     assert expected_speedup(0.8, 12, 24, 9.0)[0] < expected_speedup(0.8, 12, 24, 0.0)[0]

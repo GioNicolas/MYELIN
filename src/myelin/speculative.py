@@ -13,11 +13,15 @@ disponível: a memória aprende com todos, depois de cada rascunho ser medido.
 Speedup esperado (aceitações independentes, rascunho de γ tokens por ciclo):
 
     E(γ)  = (1 - a^(γ+1)) / (1 - a)                  tokens por ciclo
-    custo = γ · c_rascunho + c_verificação           em unidades de 1 passo do modelo completo
-    c_rascunho    = (k + H) / (L + H)
-    c_verificação = (L - k + H) / (L + H)            reaproveita as camadas 1..k do rascunho (como no LayerSkip)
+    custo = γ · c_rascunho + 1                       em unidades de 1 passo do modelo completo
+    c_rascunho = (k + H) / (L + H)
 
 H = custo da cabeça d × |V| em camadas: o rascunho paga a cabeça em todo token.
+A verificação custa um passo inteiro: as camadas 1..k dos γ primeiros tokens
+são reaproveitadas do rascunho, mas o último token rascunhado ainda precisa
+passar pelas camadas 1..k (k) antes de as γ+1 posições passarem juntas pelas
+camadas k+1..L e pela cabeça (L - k + H). Até a revisão externa do Experimento 6,
+esta conta omitia esse k (ver docs/resultados-exp6.md, "Correção").
 """
 
 from __future__ import annotations
@@ -79,7 +83,7 @@ def draft(
             if learn and memory is not None:
                 residual = rms(shallow) * states.target[t : t + 1] - q
                 memory.consolidate(key, residual)
-            if cache is not None:
+            if learn and cache is not None:
                 cache.add(key, states.next_ids[t : t + 1])
 
     return DraftLog(greedy=greedy, alpha=alpha, shallow_nll=shallow_nll)
@@ -88,9 +92,8 @@ def draft(
 def expected_speedup(acceptance: float, k: int, n_layers: int, head: float, max_gamma: int = 8) -> tuple[float, int]:
     """Melhor speedup estimado sobre o modelo completo e o γ que o atinge."""
     c_draft = (k + head) / (n_layers + head)
-    c_verify = (n_layers - k + head) / (n_layers + head)
     best = (0.0, 0)
     for gamma in range(1, max_gamma + 1):
         tokens = float(gamma + 1) if acceptance >= 1.0 else (1 - acceptance ** (gamma + 1)) / (1 - acceptance)
-        best = max(best, (tokens / (gamma * c_draft + c_verify), gamma))
+        best = max(best, (tokens / (gamma * c_draft + 1.0), gamma))
     return best
