@@ -26,20 +26,28 @@ import torch.nn.functional as F
 class NeuralCache:
     """mix(chaves, logits) -> log p misturado; add(chaves, próximos tokens) guarda os pares."""
 
-    def __init__(self, beta: float = 20.0, lam: float = 0.1, capacity: int | None = 256) -> None:
-        self.beta, self.lam, self.capacity = beta, lam, capacity
+    def __init__(
+        self, beta: float = 20.0, lam: float = 0.1, capacity: int | None = 256, min_sim: float | None = None
+    ) -> None:
+        """min_sim: se dado, só mistura quando alguma chave guardada tem cos >= min_sim (como o KNNCache)."""
+        self.beta, self.lam, self.capacity, self.min_sim = beta, lam, capacity, min_sim
         self.keys: torch.Tensor | None = None
         self.ids: torch.Tensor | None = None
 
     def mix(self, key: torch.Tensor, logits: torch.Tensor) -> torch.Tensor:
-        """Log-probabilidades (N, |V|) da mistura; sem pares guardados, log p_k."""
+        """Log-probabilidades (N, |V|) da mistura; sem pares guardados (ou nenhum familiar), log p_k."""
         log_p = F.log_softmax(logits, -1)
         if self.keys is None:
             return log_p
-        weights = torch.softmax(self.beta * F.normalize(key, dim=-1) @ self.keys.T, dim=-1)  # (N, M)
+        sims = F.normalize(key, dim=-1) @ self.keys.T  # (N, M)
+        weights = torch.softmax(self.beta * sims, dim=-1)
         p_cache = torch.zeros_like(log_p).scatter_add_(-1, self.ids.expand(len(key), -1), weights)
         keep = math.log1p(-self.lam) if self.lam < 1 else -math.inf
-        return torch.logaddexp(log_p + keep, (self.lam * p_cache).log())
+        mixed = torch.logaddexp(log_p + keep, (self.lam * p_cache).log())
+        if self.min_sim is None:
+            return mixed
+        familiar = (sims.max(-1).values >= self.min_sim).unsqueeze(-1)
+        return torch.where(familiar, mixed, log_p)
 
     def add(self, key: torch.Tensor, next_ids: torch.Tensor) -> None:
         """Guarda os pares com próximo token conhecido (ids >= 0), só os `capacity` últimos."""
