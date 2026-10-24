@@ -1,5 +1,7 @@
 # Resultados — Experimento 7: o ciclo real, linhas de base justas e o reflexo
 
+> **Atualização (Experimento 7b):** em respostas de chat realistas, com pouca repetição, o reflexo sozinho **não** ganha mais da busca de n-gramas (1,68× contra 1,73× no total de tokens). Na frente dela, como complemento, ganha por pouco em 20 de 24 respostas. E a cabeça rasa com memória não acelera. Ver [resultados-exp7b.md](resultados-exp7b.md).
+
 **Data:** 22 de outubro de 2026  
 **Modelo:** `Qwen/Qwen2.5-0.5B` (24 camadas, cabeça ≈ 9,1 camadas, passo completo = 33,1 camadas), pesos congelados, GPU T4 do Kaggle (~21 min)  
 **Responde a:** a revisão externa do [Experimento 6](resultados-exp6.md) (seção "Correção").
