@@ -33,7 +33,7 @@
 | `fast_synapse.py` | 65,2 | 48,2 (−26%) | 4,9 | 12% |
 | `test_fast_synapse.py` | 21,7 | 19,3 (−11%) | 3,7 | 7% |
 | `README.md` | 7733 | 2981 (−61%) | 17,0 | 16% |
-| `guia-de-estudo-e-pitch.md` | 4786 | 2028 (−58%) | 16,3 | 15% |
+| documento de apoio (pt) | 4786 | 2028 (−58%) | 16,3 | 15% |
 | `torch/.../activation.py` | 6,9 | 6,2 (−10%) | 2,3 | 10% |
 | WikiText: Robert Boulter | 17,7 | 14,5 (−18%) | 6,2 | 19% |
 | WikiText: Du Fu | 53,7 | 47,3 (−12%) | 11,9 | 8% |
@@ -91,7 +91,7 @@ As memórias novas a cada 8 tokens: kNN 256 −0,37 (7/7, igual ao kNN exato da 
 | `fast_synapse.py` | 31% | 25% | 35% | 32% |
 | `test_fast_synapse.py` | 29% | 26% | 22% | 20% |
 | `README.md` | 36% | 34% | 44% | 42% |
-| `guia-de-estudo-e-pitch.md` | 42% | 38% | 50% | 42% |
+| documento de apoio (pt) | 42% | 38% | 50% | 42% |
 | `torch/.../activation.py` | 26% | 24% | 29% | 17% |
 | WikiText: Robert Boulter | 37% | 32% | −6% | 12% |
 | WikiText: Du Fu | 25% | 20% | −5% | 9% |
