@@ -227,7 +227,7 @@ E cai mais do que com a cópia literal entre pedidos (SuffixDecoding), porque a 
 
 ## 4. Ordem de ataque
 
-1. **Revisão adversarial de todo o portfólio**, pelo Codex e por um Antigravity separado do tutor, em paralelo. Para cada hipótese:
+1. **Revisão adversarial de todo o portfólio**, por dois modelos externos (Codex e Antigravity), em paralelo. Para cada hipótese:
    - já existe?
    - o teste mata de verdade?
    - qual confusão estragaria o resultado?

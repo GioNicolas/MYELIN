@@ -70,7 +70,6 @@ Sempre que o estresse foi alto ($\mathcal{S}_t > \tau_{\text{stress}}$) e a Cama
 MYELIN/
 ├── README.md                                          # Visão geral e posicionamento
 ├── docs/
-│   ├── guia-de-estudo-e-pitch.md                      # Guia para estudo e entrevistas
 │   └── especificacao-matematica-e-experimento.md      # Este documento
 ├── src/
 │   └── myelin/
