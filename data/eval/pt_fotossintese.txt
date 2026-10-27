@@ -1,0 +1,344 @@
+Fotossíntese é o processo pelo qual plantas, algas e algumas bactérias captam parte da energia da luz e a guardam em substâncias orgânicas. Essa energia permite que produzam matéria para crescer e chega aos demais seres vivos pelas cadeias alimentares.
+Na forma realizada por plantas, algas e cianobactérias, a água e o dióxido de carbono participam da formação de matéria orgânica, e o oxigênio é liberado. Quase todo o oxigênio livre da atmosfera e das águas tem essa origem. Outras bactérias aproveitam a luz sem liberar oxigênio porque retiram elétrons de substâncias diferentes da água, em uma forma chamada fotossíntese anoxigênica.
+Dentro das células, pigmentos como a clorofila absorvem luz e iniciam uma sequência de transferências de energia e elétrons. A energia captada alimenta a produção de compostos orgânicos a partir do carbono do CO2. A organização dessas etapas muda entre os grupos e também responde à quantidade e à cor da luz, à temperatura, à água e aos gases disponíveis.
+Ao produzir matéria orgânica, a fotossíntese sustenta a maior parte dos ecossistemas e participa dos ciclos do carbono e do oxigênio. O uso da água por ancestrais das cianobactérias começou a enriquecer oceanos e atmosfera com oxigênio, enquanto os cloroplastos das plantas e das algas descendem de cianobactérias que passaram a viver dentro de outras células.
+O caminho entre a luz que alcança uma folha e a formação de nova biomassa reúne fenômenos que duram de frações mínimas de segundo a estações inteiras. Compreendê-lo permite explicar o crescimento das plantas, a produtividade dos oceanos, os limites impostos pelo ambiente e as tentativas de aproveitar a luz na agricultura, na produção de combustíveis e em sistemas artificiais.
+
+
+== Visão geral ==
+
+
+=== Escopo e terminologia ===
+O nome combina os termos gregos phōs, φῶς, "luz", e sýnthesis, σύνθεσις, "reunião", e passou a designar a síntese biológica de compostos de carbono na presença de clorofila e luz. Charles Reid Barnes propôs em 1893 as formas inglesas photosyntax e photosynthesis. O segundo termo se difundiu, e sua definição foi ampliada quando se conheceram as bactérias fotossintetizantes anoxigênicas e a fotofosforilação.
+A maioria dos organismos fotossintetizantes é fotoautotrófica e obtém seu carbono do CO2. Os foto-heterótrofos usam luz como fonte de energia, mas retiram carbono de compostos orgânicos. A capacidade de aproveitar luz também aparece em organismos mixotróficos e em associações simbióticas, o que impede que "fotossintetizante" funcione como categoria de parentesco evolutivo.
+
+
+=== Balanço químico ===
+Quando o CO2 é o material inicial, as reações da fotossíntese podem ser expressas pelas equações gerais simplificadas abaixo. Nelas, 
+  
+    
+      
+        
+          ⟨
+          C
+          
+            H
+            
+              2
+            
+          
+          O
+          ⟩
+        
+      
+    
+    {\textstyle \mathrm {\langle CH_{2}O\rangle } }
+  
+ designa os compostos orgânicos ricos em energia produzidos.
+Para um agente redutor que fornece hidrogênio, como água, sulfeto de hidrogênio ou hidrogênio molecular, todos representados por 
+  
+    
+      
+        
+          ⟨
+          H
+          ⟩
+        
+      
+    
+    {\textstyle \mathrm {\langle H\rangle } }
+  
+:
+
+  
+    
+      
+        
+          C
+          
+            O
+            
+              2
+            
+          
+          +
+          4
+          ⟨
+          H
+          ⟩
+           
+          
+            →
+            
+              l
+              u
+              z
+            
+          
+           
+          ⟨
+          C
+          
+            H
+            
+              2
+            
+          
+          O
+          ⟩
+          +
+          
+            H
+            
+              2
+            
+          
+          O
+        
+      
+    
+    {\displaystyle \mathrm {CO_{2}+4\langle H\rangle \ \xrightarrow {luz} \ \langle CH_{2}O\rangle +H_{2}O} }
+  
+
+Para um agente redutor que fornece elétrons, como íons ferro II ou nitrito:
+
+  
+    
+      
+        
+          C
+          
+            O
+            
+              2
+            
+          
+          +
+          4
+          
+            e
+            
+              −
+            
+          
+          +
+          4
+          
+            H
+            
+              +
+            
+          
+           
+          
+            →
+            
+              l
+              u
+              z
+            
+          
+           
+          ⟨
+          C
+          
+            H
+            
+              2
+            
+          
+          O
+          ⟩
+          +
+          
+            H
+            
+              2
+            
+          
+          O
+        
+      
+    
+    {\displaystyle \mathrm {CO_{2}+4e^{-}+4H^{+}\ \xrightarrow {luz} \ \langle CH_{2}O\rangle +H_{2}O} }
+  
+
+Algumas bactérias utilizam compostos orgânicos como agentes redutores, por exemplo o lactato, ânion do ácido láctico:
+
+  
+    
+      
+        
+          2
+           
+          l
+          a
+          c
+          t
+          a
+          t
+          o
+          +
+          C
+          
+            O
+            
+              2
+            
+          
+           
+          
+            →
+            
+              l
+              u
+              z
+            
+          
+           
+          ⟨
+          C
+          
+            H
+            
+              2
+            
+          
+          O
+          ⟩
+          +
+          
+            H
+            
+              2
+            
+          
+          O
+          +
+          2
+           
+          p
+          i
+          r
+          u
+          v
+          a
+          t
+          o
+        
+      
+    
+    {\displaystyle \mathrm {2\ lactato+CO_{2}\ \xrightarrow {luz} \ \langle CH_{2}O\rangle +H_{2}O+2\ piruvato} }
+  
+
+Com água ou sulfeto de hidrogênio como redutor, a reação geral também pode ser expressa por:
+
+  
+    
+      
+        
+          C
+          
+            O
+            
+              2
+            
+          
+          +
+          2
+          
+            H
+            
+              2
+            
+          
+          A
+           
+          
+            →
+            
+              l
+              u
+              z
+            
+          
+           
+          ⟨
+          C
+          
+            H
+            
+              2
+            
+          
+          O
+          ⟩
+          +
+          2
+          A
+          +
+          
+            H
+            
+              2
+            
+          
+          O
+        
+      
+    
+    {\displaystyle \mathrm {CO_{2}+2H_{2}A\ \xrightarrow {luz} \ \langle CH_{2}O\rangle +2A+H_{2}O} }
+  
+
+Na forma geral acima, H2A representa H2O ou H2S, mas todas as algas e plantas terrestres verdes utilizam apenas água nessa função, assim como as cianobactérias em seu modo principal de fotossíntese. Nesse caso, A é o oxigênio da água, liberado como produto de sua oxidação na forma de oxigênio molecular. O oxigênio da atmosfera e da hidrosfera é produzido pela fotossíntese oxigênica.
+As bactérias fotossintetizantes, como Chloroflexaceae, Chlorobiaceae, Chromatiaceae, Heliobacteria e Chloracidobacterium, podem utilizar um conjunto bem maior de redutores, sobretudo sulfeto de hidrogênio. Muitas cianobactérias também podem usá-lo. Nesse caso, A é o enxofre do sulfeto de hidrogênio, liberado como enxofre elementar, sem produção de oxigênio. Essa forma é chamada fotossíntese anoxigênica. Algumas cianobactérias também podem utilizar íons ferro II.
+Na fotossíntese oxigênica e na anoxigênica, a oxidação do agente redutor libera elétrons, e a energia da luz os eleva a um estado no qual podem percorrer uma cadeia de reações. Esse movimento forma adenosina trifosfato, ATP, e NADPH, moléculas que levam energia e elétrons à produção de substâncias orgânicas a partir de CO2.
+Em biofilmes anóxicos de fontes termais, bactérias fototróficas obtêm elétrons de um composto pouco comum, o arsenito, e o oxidam a arsenato. A luz e esses elétrons sustentam a fixação de CO2 em biomassa, sem formação de monóxido de carbono como produto da reação global.
+
+
+=== Etapas e escalas de tempo ===
+
+Uma divisão conceitual acompanha três tarefas da fotossíntese:
+
+Pigmentos como clorofilas, ficobilinas e carotenoides absorvem luz dentro de faixas adequadas de comprimento de onda.
+A luz eleva elétrons a um estado excitado, e reações de oxirredução convertem parte dessa energia luminosa em energia química.
+A célula usa a energia química para produzir compostos orgânicos, que alimentam o anabolismo, o crescimento e o metabolismo energético.
+As duas primeiras tarefas formam as reações luminosas, que nas plantas envolvem o fotossistema I e o fotossistema II. A terceira não absorve luz diretamente, mas depende dos produtos formados nas reações luminosas.
+Quando se consideram os eventos e sua duração, o mesmo processo pode ser detalhado em quatro etapas:
+
+
+== Organismos e estruturas fotossintéticas ==
+
+
+=== Diversidade e simbioses ===
+
+A antiga classificação reunia todos os organismos com clorofila no reino das plantas, mas a capacidade de fazer fotossíntese não basta para definir parentesco evolutivo. A fotossíntese oxigênica surgiu nas cianobactérias, e o aparelho fotossintético dos eucariontes, o cloroplasto, deriva de endossimbiose.
+
+Obtêm energia metabólica pela fotossíntese as plantas, com exceções parasitas ou mico-heterotróficas, muitos protistas e as bactérias que usam clorofilas ou bacterioclorofilas. Haloarqueias e muitos microrganismos marinhos também captam luz por rodopsinas, um mecanismo que produz gradientes de íons sem a cadeia de transferência eletrônica da fotossíntese baseada em clorofila. Alguns organismos combinam o aproveitamento da luz com a obtenção de carbono orgânico e são chamados mixotróficos.
+As relações simbióticas permitem que liquens e hospedeiros com zooclorelas, zooxantelas ou cianelas aproveitem os produtos da fotossíntese. A dependência entre os parceiros varia. Em criptófitas e cloraracniófitas, um nucleomorfo conserva parte do núcleo da alga incorporada. As amebas do gênero Paulinella oferecem outro estágio de integração, pois seus cromatóforos descendem de uma endossimbiose primária separada daquela que originou os cloroplastos de Archaeplastida.
+
+Lesmas marinhas sacoglossas incorporam cloroplastos do alimento, fenômeno chamado cleptoplastia, e algumas espécies os mantêm fotossinteticamente ativos por muitos meses. Análises genômicas de Elysia chlorotica e Plakobranchus ocellatus não encontraram os genes fotossintéticos de algas que antes se supunha terem passado ao genoma das lesmas. Os cloroplastos ficam em compartimentos formados pela própria célula animal, os cleptossomos. Esses compartimentos mantêm condições favoráveis à fotossíntese e, durante jejum prolongado, digerem os plastídios armazenados como fonte de nutrientes.
+
+
+=== Cianobactérias e outras bactérias fototróficas ===
+
+Cianobactérias, bactérias verdes, bactérias púrpuras e heliobactérias utilizam luz como fonte de energia, enquanto as haloarqueias pertencem a outro domínio e a aproveitam por um mecanismo diferente.
+Entre as bactérias, apenas as cianobactérias fazem fotossíntese oxigênica semelhante à das plantas, com antenas que reúnem ficobilinas e ficobiliproteínas, como ficocianina e ficoeritrina, em estruturas chamadas ficobilissomos. Algumas cianobactérias também realizam fotossíntese anoxigênica sob certas condições, usando H2S como doador. Nas demais bactérias, a fotossíntese é exclusivamente anoxigênica. A cadeia pode se assemelhar ao PSI, nas verdes sulfurosas e heliobactérias, ou ao PSII, nas púrpuras e verdes filamentosas.
+
+
+=== Cloroplastos, tilacoides e membranas bacterianas ===
+
+Nas bactérias fotossintetizantes, as proteínas que captam luz ficam na membrana que envolve a célula ou em extensões internas formadas por ela. Essas extensões podem ser lâminas densamente dobradas, chamadas tilacoides, ou vesículas arredondadas, conhecidas como membranas intracitoplasmáticas. Ao ocupar grande parte do interior celular, elas oferecem mais superfície para as proteínas e aumentam a quantidade de luz que a bactéria consegue absorver.
+Nas plantas e algas, a fotossíntese ocorre em organelas chamadas cloroplastos, presentes em número aproximado de 10 a 100 em uma célula vegetal típica. Duas membranas de fosfolipídios envolvem cada cloroplasto e separam seu interior do restante da célula. Dentro delas fica o estroma, um fluido aquoso atravessado por discos achatados chamados tilacoides. Esses discos podem formar pilhas, os grana, e guardam no interior um espaço chamado lúmen. As proteínas que captam luz e transportam elétrons ficam na membrana dos tilacoides, onde a célula consegue manter diferenças de concentração entre o lúmen e o estroma.
+
+As plantas absorvem luz principalmente com a clorofila, um pigmento que capta pouca luz na faixa verde do espectro luminoso. A reflexão dessa faixa dá à maioria das plantas sua cor, enquanto carotenos e xantofilas ajudam a captar outras cores. Nas algas, a clorofila se combina com pigmentos como ficocianina, carotenos e xantofilas nas algas verdes, ficoeritrina nas algas vermelhas, ou rodófitas, e fucoxantina nas algas pardas e diatomáceas. As cores desses organismos resultam das faixas absorvidas e refletidas por cada combinação.
+Nas plantas e algas, os pigmentos trabalham em conjunto dentro de estruturas chamadas proteínas antena, ou complexos coletores de luz.
+Embora as células das partes verdes de uma planta contenham cloroplastos, a maior parte dessas organelas fica nas folhas, estruturas adaptadas à fotossíntese. Certas espécies adaptadas à luz solar intensa e à aridez, como muitas Euphorbia e cactáceas, têm nos caules seus principais órgãos fotossintéticos. As células dos tecidos internos da folha, o mesófilo, podem conter de 450.000 a 800.000 cloroplastos por milímetro quadrado de folha. A superfície foliar é recoberta por uma cutícula cerosa, resistente à água, que evita a evaporação excessiva e reduz a absorção de ultravioleta e luz azul, limitando o aquecimento. A epiderme transparente deixa a luz chegar às células do parênquima paliçádico, onde ocorre a maior parte da fotossíntese.
+
+
+== Conversão da energia luminosa ==
+
+
+=== Pigmentos, antenas e centros de reação ===
+
+Os organismos fototróficos captam a energia da luz com pigmentos que absorvem faixas diferentes do espectro. Plantas verdes e cianobactérias usam clorofilas, enquanto outras bactérias usam bacterioclorofilas. Como as clorofilas absorvem pouco na faixa verde, grande parte dessa luz é refletida e as plantas parecem verdes. O experimento de Engelmann determinou pela primeira vez, experimentalmente, a faixa espectral mais favorável à fotossíntese. As moléculas que absorvem luz são chamadas cromóforos. Quando formam complexos com proteínas, constituem pigmentos.

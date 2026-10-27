@@ -58,7 +58,7 @@ src/myelin/      sinapse rápida, portão de estresse, tradutor P_k, memória kN
                  controles e o simulador exato do ciclo de decodificação especulativa
 experiments/     um script por experimento (validação escolhe hiperparâmetros, teste mede)
 notebooks/       os mesmos experimentos para rodar em GPU no Colab/Kaggle
-data/            textos de avaliação congelados (fontes e licenças em data/eval_dominio/FONTES.md)
+data/            textos de avaliação congelados (fontes e licenças em data/eval/FONTES.md e data/eval_dominio/FONTES.md)
 tests/           testes em CPU com modelos de brinquedo
 docs/            especificação, resultados de cada experimento e hipóteses
 ```

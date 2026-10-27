@@ -26,9 +26,9 @@ EXPLAIN = "Explain what the code below does, part by part."
 DOCUMENT = "Add a docstring and type hints to every function in the code below. Return the complete code."
 
 VALIDATION = [
-    ("resumo", "README.md", "README.md", SUMMARY["pt"]),
+    ("resumo", "Wikipédia: Fotossíntese", "pt_fotossintese.txt", SUMMARY["pt"]),
     ("resumo", "wikitext: Robert Boulter", "wikitext_robert_boulter.txt", SUMMARY["en"]),
-    ("tradução", "guia-de-estudo-e-pitch.md", "guia-de-estudo-e-pitch.md", TRANSLATE),
+    ("tradução", "Wikipédia: Revolução Industrial", "pt_revolucao_industrial.txt", TRANSLATE),
     ("código-explicar", "torch activation.py", "torch_activation.py", EXPLAIN),
     ("código-explicar", "test_fast_synapse.py", "test_fast_synapse.py", EXPLAIN),
     ("código-editar", "fast_synapse.py", "fast_synapse.py", DOCUMENT),

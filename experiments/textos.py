@@ -6,8 +6,11 @@ mudou entre rodadas). Nenhum foi usado para treinar o tradutor nem para
 calibrar as chaves:
   - código-dev : 2 arquivos Python do próprio MYELIN (comentários em português);
                  usados no desenvolvimento, então valem só como referência;
-  - pt         : README.md e docs/guia-de-estudo-e-pitch.md (prosa em português,
-                 fora do treino do tradutor);
+  - pt         : 2 artigos da Wikipédia em português, Fotossíntese e Revolução
+                 Industrial (prosa fora do treino do tradutor). Até o Experimento 7b,
+                 este grupo eram cópias do README e de um documento de apoio do
+                 projeto; os números publicados usam os arquivos do commit db4b904
+                 (ver data/eval/FONTES.md);
   - código-en  : torch/nn/modules/activation.py (comentários em inglês);
   - prosa-en   : 2 artigos do split de TESTE do WikiText-2 (o tradutor viu o de treino).
 
@@ -53,8 +56,8 @@ EVAL_DIR = ROOT / "data" / "eval"
 EVAL_FILES = [
     ("código-dev", "src/myelin/fast_synapse.py", "fast_synapse.py"),
     ("código-dev", "tests/test_fast_synapse.py", "test_fast_synapse.py"),
-    ("pt", "README.md", "README.md"),
-    ("pt", "docs/guia-de-estudo-e-pitch.md", "guia-de-estudo-e-pitch.md"),
+    ("pt", "Wikipédia: Fotossíntese", "pt_fotossintese.txt"),
+    ("pt", "Wikipédia: Revolução Industrial", "pt_revolucao_industrial.txt"),
     ("código-en", "torch/nn/modules/activation.py", "torch_activation.py"),
     ("prosa-en", "wikitext: Robert Boulter", "wikitext_robert_boulter.txt"),
     ("prosa-en", "wikitext: Du Fu", "wikitext_du_fu.txt"),
